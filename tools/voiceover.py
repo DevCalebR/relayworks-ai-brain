@@ -12,7 +12,7 @@ AUDIO_OUTPUT_DIR = Path("outputs/audio")
 
 # Default ElevenLabs public/sample voice.
 # You can replace this later with a custom voice ID from your ElevenLabs account.
-DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
+DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
 
 DEFAULT_MODEL_ID = "eleven_multilingual_v2"
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
