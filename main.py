@@ -1,6 +1,7 @@
 from agents.script_agent import generate_script
 from tools.file_writer import save_script
 from tools.voiceover import generate_voiceover
+from tools.video_builder import build_video
 
 
 def main():
@@ -20,6 +21,11 @@ def main():
 
     print("\nSaved audio path:")
     print(audio_path)
+
+    video_path = build_video(audio_path, topic, topic)
+
+    print("\nSaved video path:")
+    print(video_path)
 
 
 if __name__ == "__main__":
