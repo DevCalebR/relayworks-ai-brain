@@ -10,9 +10,8 @@ load_dotenv()
 
 AUDIO_OUTPUT_DIR = Path("outputs/audio")
 
-# Default ElevenLabs public/sample voice.
-# You can replace this later with a custom voice ID from your ElevenLabs account.
-DEFAULT_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+# Default ElevenLabs public/sample voice used when ELEVENLABS_VOICE_ID is unset.
+DEFAULT_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
 DEFAULT_MODEL_ID = "eleven_multilingual_v2"
 DEFAULT_OUTPUT_FORMAT = "mp3_44100_128"
@@ -44,13 +43,15 @@ def generate_voiceover(text, output_name):
     if not text or not text.strip():
         raise ValueError("Voiceover text is empty")
 
+    voice_id = os.getenv("ELEVENLABS_VOICE_ID", DEFAULT_VOICE_ID)
+
     AUDIO_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     filename = f"{_safe_filename(output_name)}.mp3"
     output_path = AUDIO_OUTPUT_DIR / filename
 
     url = (
-        f"https://api.elevenlabs.io/v1/text-to-speech/{DEFAULT_VOICE_ID}"
+        f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
         f"?output_format={DEFAULT_OUTPUT_FORMAT}"
     )
 
