@@ -1,6 +1,7 @@
 import argparse
 
 from agents.script_agent import generate_script
+from tools.captions import save_srt_captions
 from tools.file_writer import save_script
 from tools.test_audio import create_test_audio
 from tools.voiceover import generate_voiceover
@@ -16,7 +17,7 @@ def parse_args():
     )
     parser.add_argument(
         "--mode",
-        choices=["full", "script", "voiceover", "video", "test-audio"],
+        choices=["full", "script", "voiceover", "video", "test-audio", "captions"],
         default="full",
         help="Pipeline mode to run.",
     )
@@ -65,6 +66,15 @@ def main():
     print(script_path)
 
     if args.mode == "script":
+        return
+
+    if args.mode in ["full", "captions"]:
+        captions_path = save_srt_captions(script, topic)
+
+        print("\nSaved captions path:")
+        print(captions_path)
+
+    if args.mode == "captions":
         return
 
     audio_path = generate_voiceover(script, topic)
