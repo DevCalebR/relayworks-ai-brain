@@ -2,6 +2,7 @@ import argparse
 
 from agents.script_agent import generate_script
 from tools.file_writer import save_script
+from tools.test_audio import create_test_audio
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
 
@@ -15,7 +16,7 @@ def parse_args():
     )
     parser.add_argument(
         "--mode",
-        choices=["full", "script", "voiceover", "video"],
+        choices=["full", "script", "voiceover", "video", "test-audio"],
         default="full",
         help="Pipeline mode to run.",
     )
@@ -34,6 +35,13 @@ def parse_args():
 def main():
     args = parse_args()
     topic = args.topic
+
+    if args.mode == "test-audio":
+        audio_path = create_test_audio(topic)
+
+        print("\nSaved audio path:")
+        print(audio_path)
+        return
 
     if args.mode == "video":
         if not args.audio_path:
