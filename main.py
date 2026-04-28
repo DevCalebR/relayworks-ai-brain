@@ -31,6 +31,10 @@ def parse_args():
         "--audio-path",
         help="Existing audio file path required when --mode video.",
     )
+    parser.add_argument(
+        "--captions-path",
+        help="Optional SRT captions file path used when --mode video.",
+    )
     return parser.parse_args()
 
 
@@ -59,7 +63,7 @@ def main():
         if not args.audio_path:
             raise ValueError("--audio-path is required when --mode video")
 
-        video_path = build_video(args.audio_path, topic, topic)
+        video_path = build_video(args.audio_path, topic, topic, args.captions_path)
         outputs = {"video": video_path}
 
         print("\nSaved video path:")
@@ -105,7 +109,7 @@ def main():
         log_success(topic, args.mode, outputs)
         return
 
-    video_path = build_video(audio_path, topic, topic)
+    video_path = build_video(audio_path, topic, topic, captions_path)
     outputs["video"] = video_path
 
     print("\nSaved video path:")
