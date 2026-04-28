@@ -7,3 +7,5 @@ outputs/scripts/*.txt
 outputs/audio/*.mp3
 outputs/videos/*.mp4
 outputs/captions/*.srt
+outputs/runs/*
+!outputs/runs/.gitkeep

@@ -4,6 +4,7 @@ from agents.script_agent import generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
 from tools.logger import log_pipeline_run
+from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
@@ -35,11 +36,26 @@ def parse_args():
         "--captions-path",
         help="Optional SRT captions file path used when --mode video.",
     )
+    parser.add_argument(
+        "--organize",
+        action="store_true",
+        help="Copy generated outputs into a timestamped local run folder.",
+    )
     return parser.parse_args()
 
 
-def log_success(topic, mode, outputs):
-    log_entry = log_pipeline_run(topic, mode, outputs)
+def log_success(topic, mode, outputs, organize=False):
+    log_outputs = dict(outputs)
+
+    if organize:
+        organize_result = organize_run_outputs(topic, outputs)
+        log_outputs["run_folder"] = organize_result["run_folder"]
+        log_outputs["copied_outputs"] = organize_result["copied_outputs"]
+
+        print("\nOrganized run folder:")
+        print(organize_result["run_folder"])
+
+    log_entry = log_pipeline_run(topic, mode, log_outputs)
 
     print("\nLogged pipeline run:")
     print(log_entry)
@@ -56,7 +72,7 @@ def main():
         print("\nSaved audio path:")
         print(audio_path)
 
-        log_success(topic, args.mode, outputs)
+        log_success(topic, args.mode, outputs, args.organize)
         return
 
     if args.mode == "video":
@@ -69,7 +85,7 @@ def main():
         print("\nSaved video path:")
         print(video_path)
 
-        log_success(topic, args.mode, outputs)
+        log_success(topic, args.mode, outputs, args.organize)
         return
 
     script = generate_script(topic)
@@ -85,7 +101,7 @@ def main():
     print(script_path)
 
     if args.mode == "script":
-        log_success(topic, args.mode, outputs)
+        log_success(topic, args.mode, outputs, args.organize)
         return
 
     if args.mode in ["full", "captions"]:
@@ -96,7 +112,7 @@ def main():
         print(captions_path)
 
     if args.mode == "captions":
-        log_success(topic, args.mode, outputs)
+        log_success(topic, args.mode, outputs, args.organize)
         return
 
     audio_path = generate_voiceover(script, topic)
@@ -106,7 +122,7 @@ def main():
     print(audio_path)
 
     if args.mode == "voiceover":
-        log_success(topic, args.mode, outputs)
+        log_success(topic, args.mode, outputs, args.organize)
         return
 
     video_path = build_video(audio_path, topic, topic, captions_path)
@@ -115,7 +131,7 @@ def main():
     print("\nSaved video path:")
     print(video_path)
 
-    log_success(topic, args.mode, outputs)
+    log_success(topic, args.mode, outputs, args.organize)
 
 
 if __name__ == "__main__":
