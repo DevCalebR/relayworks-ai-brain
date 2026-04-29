@@ -46,6 +46,11 @@ def parse_args():
         help="Optional SRT captions file path used when --mode video.",
     )
     parser.add_argument(
+        "--template",
+        default="default",
+        help="Built-in local video template to use when generating videos.",
+    )
+    parser.add_argument(
         "--organize",
         action="store_true",
         help="Copy generated outputs into a timestamped local run folder.",
@@ -88,8 +93,14 @@ def main():
         if not args.audio_path:
             raise ValueError("--audio-path is required when --mode video")
 
-        video_path = build_video(args.audio_path, topic, topic, args.captions_path)
-        outputs = {"video": video_path}
+        video_path = build_video(
+            args.audio_path,
+            topic,
+            topic,
+            args.captions_path,
+            template=args.template,
+        )
+        outputs = {"video": video_path, "template": args.template}
 
         print("\nSaved video path:")
         print(video_path)
@@ -151,8 +162,15 @@ def main():
         log_success(topic, args.mode, outputs, args.organize)
         return
 
-    video_path = build_video(audio_path, topic, topic, captions_path)
+    video_path = build_video(
+        audio_path,
+        topic,
+        topic,
+        captions_path,
+        template=args.template,
+    )
     outputs["video"] = video_path
+    outputs["template"] = args.template
 
     print("\nSaved video path:")
     print(video_path)
