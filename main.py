@@ -58,6 +58,12 @@ def parse_args():
         action="store_true",
         help="Copy generated outputs into a timestamped local run folder.",
     )
+    parser.add_argument(
+        "--caption-offset",
+        type=float,
+        default=0.5,
+        help="Caption start offset in seconds used when full mode has audio duration.",
+    )
     return parser.parse_args()
 
 
@@ -183,8 +189,10 @@ def main():
             narration_text,
             topic,
             total_duration_seconds=audio_duration,
+            start_offset_seconds=args.caption_offset,
         )
         outputs["captions"] = captions_path
+        outputs["caption_offset"] = args.caption_offset
 
         print("\nSaved captions path:")
         print(captions_path)
