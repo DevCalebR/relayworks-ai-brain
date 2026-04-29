@@ -1,6 +1,8 @@
 import re
 from pathlib import Path
 
+from tools.text_cleaner import clean_narration_text
+
 
 CAPTIONS_OUTPUT_DIR = Path("outputs/captions")
 
@@ -32,6 +34,7 @@ def save_srt_captions(
     output_name,
     words_per_caption=8,
     seconds_per_caption=2.5,
+    total_duration_seconds=None,
 ):
     """
     Save simple SRT captions from script text using fixed word chunks.
@@ -41,6 +44,7 @@ def save_srt_captions(
         output_name: Human-readable name used to create the output filename.
         words_per_caption: Number of words per caption.
         seconds_per_caption: Duration assigned to each caption.
+        total_duration_seconds: Optional total duration used to align captions.
 
     Returns:
         The saved SRT file path as a string.
@@ -51,7 +55,10 @@ def save_srt_captions(
     if seconds_per_caption <= 0:
         raise ValueError("seconds_per_caption must be greater than 0")
 
-    words = str(script).split()
+    if total_duration_seconds is not None and total_duration_seconds <= 0:
+        raise ValueError("total_duration_seconds must be greater than 0")
+
+    words = clean_narration_text(script).split()
 
     if not words:
         raise ValueError("Caption script is empty")
@@ -61,12 +68,17 @@ def save_srt_captions(
 
     caption_blocks = []
 
-    for index, caption_words in enumerate(
-        _chunk_words(words, words_per_caption),
-        start=1,
-    ):
-        start_time = (index - 1) * seconds_per_caption
-        end_time = index * seconds_per_caption
+    word_chunks = list(_chunk_words(words, words_per_caption))
+    caption_count = len(word_chunks)
+
+    for index, caption_words in enumerate(word_chunks, start=1):
+        if total_duration_seconds is None:
+            start_time = (index - 1) * seconds_per_caption
+            end_time = index * seconds_per_caption
+        else:
+            start_time = (index - 1) * total_duration_seconds / caption_count
+            end_time = index * total_duration_seconds / caption_count
+
         caption_text = " ".join(caption_words)
 
         caption_blocks.append(

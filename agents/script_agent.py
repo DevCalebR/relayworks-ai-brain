@@ -35,7 +35,12 @@ def generate_script(topic: str) -> str:
                     "- Optimize for high viewer retention.\n"
                     "- Use simple language.\n"
                     "- Keep the script 60-90 seconds long.\n"
-                    "- Return only the script text."
+                    "- Do not include speaker labels.\n"
+                    "- Do not include markdown.\n"
+                    "- Do not include timestamps.\n"
+                    "- Do not include bracketed scene directions.\n"
+                    "- Do not include camera directions.\n"
+                    "- Output only the words that should be spoken aloud."
                 ),
             },
         ],
