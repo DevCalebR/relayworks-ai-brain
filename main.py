@@ -6,6 +6,7 @@ from moviepy import AudioFileClip
 from agents.script_agent import generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
+from tools.image_inputs import collect_image_paths
 from tools.logger import log_pipeline_run
 from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
@@ -50,6 +51,15 @@ def parse_args():
     parser.add_argument(
         "--captions-path",
         help="Optional SRT captions file path used when --mode video.",
+    )
+    parser.add_argument(
+        "--images-dir",
+        help="Optional directory of local images to use in generated videos.",
+    )
+    parser.add_argument(
+        "--image-paths",
+        nargs="+",
+        help="Optional one or more local image paths to use in generated videos.",
     )
     parser.add_argument(
         "--template",
@@ -103,6 +113,7 @@ def get_audio_duration_seconds(audio_path):
 def main():
     args = parse_args()
     topic = args.topic
+    image_paths = []
 
     if args.mode == "upload-check":
         if not args.run_folder:
@@ -111,6 +122,9 @@ def main():
         validation_result = validate_upload_package(args.run_folder)
         print(json.dumps(validation_result, indent=2))
         return
+
+    if args.mode in ["full", "video"]:
+        image_paths = collect_image_paths(args.images_dir, args.image_paths)
 
     if args.mode == "test-audio":
         audio_path = create_test_audio(topic)
@@ -132,8 +146,14 @@ def main():
             topic,
             args.captions_path,
             template=args.template,
+            image_paths=image_paths,
         )
-        outputs = {"video": video_path, "template": args.template}
+        outputs = {
+            "video": video_path,
+            "template": args.template,
+            "images_used": bool(image_paths),
+            "image_count": len(image_paths),
+        }
 
         print("\nSaved video path:")
         print(video_path)
@@ -218,9 +238,12 @@ def main():
         topic,
         captions_path,
         template=args.template,
+        image_paths=image_paths,
     )
     outputs["video"] = video_path
     outputs["template"] = args.template
+    outputs["images_used"] = bool(image_paths)
+    outputs["image_count"] = len(image_paths)
 
     print("\nSaved video path:")
     print(video_path)
