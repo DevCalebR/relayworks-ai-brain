@@ -4,6 +4,7 @@ from agents.script_agent import generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
 from tools.logger import log_pipeline_run
+from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
 from tools.voiceover import generate_voiceover
@@ -19,7 +20,15 @@ def parse_args():
     )
     parser.add_argument(
         "--mode",
-        choices=["full", "script", "voiceover", "video", "test-audio", "captions"],
+        choices=[
+            "full",
+            "script",
+            "voiceover",
+            "video",
+            "test-audio",
+            "captions",
+            "metadata",
+        ],
         default="full",
         help="Pipeline mode to run.",
     )
@@ -104,6 +113,16 @@ def main():
         log_success(topic, args.mode, outputs, args.organize)
         return
 
+    if args.mode == "metadata":
+        metadata_path = save_video_metadata(topic, script, topic)
+        outputs["metadata"] = metadata_path
+
+        print("\nSaved metadata path:")
+        print(metadata_path)
+
+        log_success(topic, args.mode, outputs, args.organize)
+        return
+
     if args.mode in ["full", "captions"]:
         captions_path = save_srt_captions(script, topic)
         outputs["captions"] = captions_path
@@ -114,6 +133,13 @@ def main():
     if args.mode == "captions":
         log_success(topic, args.mode, outputs, args.organize)
         return
+
+    if args.mode == "full":
+        metadata_path = save_video_metadata(topic, script, topic)
+        outputs["metadata"] = metadata_path
+
+        print("\nSaved metadata path:")
+        print(metadata_path)
 
     audio_path = generate_voiceover(script, topic)
     outputs["audio"] = audio_path

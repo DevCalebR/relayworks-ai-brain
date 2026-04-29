@@ -8,6 +8,7 @@ RUNS_OUTPUT_DIR = Path("outputs/runs")
 OUTPUT_FILENAMES = {
     "script": "script.txt",
     "captions": "captions.srt",
+    "metadata": "metadata.json",
     "audio": "audio.mp3",
     "video": "video.mp4",
 }
