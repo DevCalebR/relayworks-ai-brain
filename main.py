@@ -1,4 +1,5 @@
 import argparse
+import json
 
 from moviepy import AudioFileClip
 
@@ -10,6 +11,7 @@ from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
 from tools.text_cleaner import clean_narration_text, ensure_call_to_action
+from tools.upload_check import validate_upload_package
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
 
@@ -31,6 +33,7 @@ def parse_args():
             "test-audio",
             "captions",
             "metadata",
+            "upload-check",
         ],
         default="full",
         help="Pipeline mode to run.",
@@ -64,6 +67,10 @@ def parse_args():
         default=0.5,
         help="Caption start offset in seconds used when full mode has audio duration.",
     )
+    parser.add_argument(
+        "--run-folder",
+        help="Organized run folder path required when --mode upload-check.",
+    )
     return parser.parse_args()
 
 
@@ -96,6 +103,14 @@ def get_audio_duration_seconds(audio_path):
 def main():
     args = parse_args()
     topic = args.topic
+
+    if args.mode == "upload-check":
+        if not args.run_folder:
+            raise ValueError("--run-folder is required when --mode upload-check")
+
+        validation_result = validate_upload_package(args.run_folder)
+        print(json.dumps(validation_result, indent=2))
+        return
 
     if args.mode == "test-audio":
         audio_path = create_test_audio(topic)
