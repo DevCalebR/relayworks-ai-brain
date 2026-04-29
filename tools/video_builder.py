@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from moviepy import AudioFileClip, ColorClip, CompositeVideoClip, TextClip
+from moviepy import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip, TextClip
 
 
 VIDEO_OUTPUT_DIR = Path("outputs/videos")
@@ -189,14 +189,8 @@ def _get_template_config(template):
     return configs[template]
 
 
-def _create_background_clip(template_config, duration):
-    clips = [
-        ColorClip(
-            size=VIDEO_SIZE,
-            color=template_config["background_color"],
-            duration=duration,
-        )
-    ]
+def _create_shape_clips(template_config, duration):
+    clips = []
 
     for shape in template_config["shapes"]:
         clip = ColorClip(
@@ -209,6 +203,71 @@ def _create_background_clip(template_config, duration):
             clip = clip.with_opacity(shape["opacity"])
 
         clips.append(clip)
+
+    return clips
+
+
+def _create_background_clip(template_config, duration):
+    clips = [
+        ColorClip(
+            size=VIDEO_SIZE,
+            color=template_config["background_color"],
+            duration=duration,
+        ),
+        *_create_shape_clips(template_config, duration),
+    ]
+
+    return CompositeVideoClip(clips, size=VIDEO_SIZE)
+
+
+def _create_cover_image_clip(image_path, duration, start_time=0):
+    image_file = Path(image_path)
+
+    if not image_file.exists():
+        raise FileNotFoundError(f"Image file does not exist: {image_path}")
+
+    image_clip = ImageClip(str(image_file), duration=duration)
+    image_width, image_height = image_clip.size
+    video_width, video_height = VIDEO_SIZE
+    scale = max(video_width / image_width, video_height / image_height)
+    resized_clip = image_clip.resized(
+        new_size=(int(image_width * scale), int(image_height * scale))
+    )
+    cropped_clip = resized_clip.cropped(
+        x_center=resized_clip.w / 2,
+        y_center=resized_clip.h / 2,
+        width=video_width,
+        height=video_height,
+    )
+
+    if start_time:
+        cropped_clip = cropped_clip.with_start(start_time)
+
+    return cropped_clip
+
+
+def _create_image_background_clip(image_paths, template_config, duration):
+    if not image_paths:
+        raise ValueError("image_paths must contain at least one image")
+
+    if len(image_paths) == 1:
+        image_clips = [_create_cover_image_clip(image_paths[0], duration)]
+    else:
+        image_clips = []
+        image_duration = duration / len(image_paths)
+
+        for index, image_path in enumerate(image_paths):
+            start_time = index * image_duration
+            clip_duration = (
+                duration - start_time
+                if index == len(image_paths) - 1
+                else image_duration
+            )
+            image_clips.append(
+                _create_cover_image_clip(image_path, clip_duration, start_time)
+            )
+
+    clips = [*image_clips, *_create_shape_clips(template_config, duration)]
 
     return CompositeVideoClip(clips, size=VIDEO_SIZE)
 
@@ -292,7 +351,14 @@ def _create_caption_clips(captions_path, template_config, max_duration):
     return caption_clips
 
 
-def build_video(audio_path, title, output_name, captions_path=None, template="default"):
+def build_video(
+    audio_path,
+    title,
+    output_name,
+    captions_path=None,
+    template="default",
+    image_paths=None,
+):
     """
     Build a simple vertical MP4 video from a voiceover audio file.
 
@@ -302,6 +368,7 @@ def build_video(audio_path, title, output_name, captions_path=None, template="de
         output_name: Human-readable name used for the output filename.
         captions_path: Optional SRT captions file to burn into the video.
         template: Built-in visual template name.
+        image_paths: Optional image paths to use as the main visual layer.
 
     Returns:
         The saved MP4 file path as a string.
@@ -322,7 +389,11 @@ def build_video(audio_path, title, output_name, captions_path=None, template="de
     audio_clip = AudioFileClip(str(audio_file))
     duration = audio_clip.duration
 
-    background_clip = _create_background_clip(template_config, duration)
+    background_clip = (
+        _create_image_background_clip(image_paths, template_config, duration)
+        if image_paths
+        else _create_background_clip(template_config, duration)
+    )
     title_clips = _create_title_clip(title, template_config, duration)
 
     caption_clips = (

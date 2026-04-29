@@ -8,6 +8,8 @@ outputs/audio/*.mp3
 outputs/videos/*.mp4
 outputs/captions/*.srt
 outputs/metadata/*.json
+outputs/images/*.png
 outputs/runs/*
 !outputs/runs/.gitkeep
 !outputs/metadata/.gitkeep
+!outputs/images/.gitkeep
