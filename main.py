@@ -9,7 +9,7 @@ from tools.logger import log_pipeline_run
 from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
-from tools.text_cleaner import clean_narration_text
+from tools.text_cleaner import clean_narration_text, ensure_call_to_action
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
 
@@ -128,7 +128,7 @@ def main():
 
     script = generate_script(topic)
 
-    narration_text = clean_narration_text(script)
+    narration_text = ensure_call_to_action(clean_narration_text(script))
 
     script_path = save_script(topic, script)
     outputs = {"script": script_path}

@@ -34,6 +34,22 @@ _EMOJI_PATTERN = re.compile(
     flags=re.UNICODE,
 )
 
+_CTA_PATTERN = re.compile(
+    r"\b(?:subscribe|like\s+this\s+video|follow|comment\s+below)\b",
+    flags=re.IGNORECASE,
+)
+
+_DEFAULT_CTA = (
+    "If this helped, like this video and subscribe for more AI business ideas."
+)
+
+
+def _collapse_whitespace(text):
+    collapsed_text = re.sub(r"[ \t]+", " ", text)
+    collapsed_text = re.sub(r"\s*\n\s*", " ", collapsed_text)
+    collapsed_text = re.sub(r"\s{2,}", " ", collapsed_text)
+    return collapsed_text.strip()
+
 
 def clean_narration_text(text):
     """
@@ -46,7 +62,19 @@ def clean_narration_text(text):
     cleaned_text = _SPEAKER_LABEL_PATTERN.sub("", cleaned_text)
     cleaned_text = _MARKDOWN_MARKER_PATTERN.sub("", cleaned_text)
     cleaned_text = _EMOJI_PATTERN.sub("", cleaned_text)
-    cleaned_text = re.sub(r"[ \t]+", " ", cleaned_text)
-    cleaned_text = re.sub(r"\s*\n\s*", " ", cleaned_text)
-    cleaned_text = re.sub(r"\s{2,}", " ", cleaned_text)
-    return cleaned_text.strip()
+    return _collapse_whitespace(cleaned_text)
+
+
+def ensure_call_to_action(text):
+    """
+    Ensure narration ends with a short natural call to action.
+    """
+    narration_text = _collapse_whitespace(str(text or ""))
+
+    if not narration_text:
+        return _DEFAULT_CTA
+
+    if _CTA_PATTERN.search(narration_text):
+        return narration_text
+
+    return _collapse_whitespace(f"{narration_text} {_DEFAULT_CTA}")
