@@ -1,5 +1,7 @@
 import argparse
 
+from moviepy import AudioFileClip
+
 from agents.script_agent import generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
@@ -7,6 +9,7 @@ from tools.logger import log_pipeline_run
 from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
+from tools.text_cleaner import clean_narration_text
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
 
@@ -75,6 +78,15 @@ def log_success(topic, mode, outputs, organize=False):
     print(log_entry)
 
 
+def get_audio_duration_seconds(audio_path):
+    audio_clip = AudioFileClip(audio_path)
+
+    try:
+        return audio_clip.duration
+    finally:
+        audio_clip.close()
+
+
 def main():
     args = parse_args()
     topic = args.topic
@@ -110,6 +122,8 @@ def main():
 
     script = generate_script(topic)
 
+    narration_text = clean_narration_text(script)
+
     script_path = save_script(topic, script)
     outputs = {"script": script_path}
 
@@ -134,14 +148,13 @@ def main():
         log_success(topic, args.mode, outputs, args.organize)
         return
 
-    if args.mode in ["full", "captions"]:
-        captions_path = save_srt_captions(script, topic)
+    if args.mode == "captions":
+        captions_path = save_srt_captions(narration_text, topic)
         outputs["captions"] = captions_path
 
         print("\nSaved captions path:")
         print(captions_path)
 
-    if args.mode == "captions":
         log_success(topic, args.mode, outputs, args.organize)
         return
 
@@ -152,7 +165,7 @@ def main():
         print("\nSaved metadata path:")
         print(metadata_path)
 
-    audio_path = generate_voiceover(script, topic)
+    audio_path = generate_voiceover(narration_text, topic)
     outputs["audio"] = audio_path
 
     print("\nSaved audio path:")
@@ -161,6 +174,20 @@ def main():
     if args.mode == "voiceover":
         log_success(topic, args.mode, outputs, args.organize)
         return
+
+    captions_path = None
+
+    if args.mode == "full":
+        audio_duration = get_audio_duration_seconds(audio_path)
+        captions_path = save_srt_captions(
+            narration_text,
+            topic,
+            total_duration_seconds=audio_duration,
+        )
+        outputs["captions"] = captions_path
+
+        print("\nSaved captions path:")
+        print(captions_path)
 
     video_path = build_video(
         audio_path,
