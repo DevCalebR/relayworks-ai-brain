@@ -110,7 +110,29 @@ def _build_youtube_client():
     return build("youtube", "v3", credentials=credentials)
 
 
-def upload_video_from_run_folder(run_folder, privacy_status="private"):
+def upload_thumbnail(youtube_client, video_id, thumbnail_path):
+    thumbnail_file = Path(thumbnail_path)
+
+    if not thumbnail_file.exists():
+        raise FileNotFoundError(f"Thumbnail file does not exist: {thumbnail_path}")
+
+    media = MediaFileUpload(str(thumbnail_file), resumable=True)
+    response = youtube_client.thumbnails().set(
+        videoId=video_id,
+        media_body=media,
+    ).execute()
+
+    return response
+
+
+UPLOAD_THUMBNAIL_HELPER = upload_thumbnail
+
+
+def upload_video_from_run_folder(
+    run_folder,
+    privacy_status="private",
+    upload_thumbnail=False,
+):
     """
     Upload video.mp4 from an organized run folder using metadata.json.
 
@@ -125,8 +147,12 @@ def upload_video_from_run_folder(run_folder, privacy_status="private"):
     run_path = Path(run_folder)
     video_path = run_path / "video.mp4"
     metadata_path = run_path / "metadata.json"
+    thumbnail_path = run_path / "thumbnail.png"
     metadata = _load_metadata(metadata_path)
     selected_privacy_status = _get_privacy_status(privacy_status)
+
+    if upload_thumbnail and not thumbnail_path.exists():
+        raise FileNotFoundError(f"Thumbnail file does not exist: {thumbnail_path}")
 
     title = str(metadata["title"]).strip()
     description = _description_with_hashtags(
@@ -159,11 +185,23 @@ def upload_video_from_run_folder(run_folder, privacy_status="private"):
         _, response = request.next_chunk()
 
     video_id = response["id"]
-
-    return {
+    upload_result = {
         "video_id": video_id,
         "video_url": f"https://www.youtube.com/watch?v={video_id}",
         "title": title,
         "privacy_status": selected_privacy_status,
         "run_folder": str(run_path),
+        "thumbnail_uploaded": False,
     }
+
+    if upload_thumbnail:
+        thumbnail_response = UPLOAD_THUMBNAIL_HELPER(
+            youtube,
+            video_id,
+            thumbnail_path,
+        )
+        upload_result["thumbnail_uploaded"] = True
+        upload_result["thumbnail_path"] = str(thumbnail_path)
+        upload_result["thumbnail_response"] = thumbnail_response
+
+    return upload_result
