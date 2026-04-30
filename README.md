@@ -1,8 +1,8 @@
 # RelayWorks AI Content Brain
 
-RelayWorks AI Content Brain is a local Python pipeline for generating short-form video assets. It can create a script with OpenAI, generate SRT captions, create YouTube-ready metadata JSON, produce an ElevenLabs voiceover, build a simple vertical MP4 with optional burned-in captions, use local or OpenAI-generated images as the main video visual layer, create local test audio, organize successful run outputs, validate upload readiness, manually upload a validated run folder to YouTube, and log successful generation runs to `memory/logs.json`.
+RelayWorks AI Content Brain is a local Python pipeline for producing short-form video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
 
-The project is intentionally local-first. It can perform a manual OAuth-based YouTube upload from an existing organized run folder, but it does not schedule, research topics, add stock footage, download internet images, or analyze performance yet.
+The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, topic research, analytics, and thumbnail generation are not built yet.
 
 ## Current Pipeline Status
 
@@ -15,22 +15,20 @@ The pipeline currently supports these CLI modes:
 - `test-audio`: creates a local test MP3 without API calls.
 - `video`: builds an MP4 from an existing audio file, optionally using burned-in captions and local image inputs.
 - `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and optional OpenAI-generated scene images.
-- `upload-check`: validates an organized run folder before manual upload.
-- `upload`: manually uploads `video.mp4` from an organized run folder using `metadata.json` after upload-check validation passes.
+- `upload-check`: validates an organized run folder before upload.
+- `upload`: uploads `video.mp4` from a validated organized run folder using `metadata.json`.
 
-The pipeline also supports:
+Common options:
 
-- `--template`: selects a built-in local video template.
-- `--captions-path`: supplies an existing `.srt` file for `video` mode so captions can be burned into the generated MP4.
+- `--template`: selects the local video style template.
+- `--caption-offset`: adjusts generated caption timing in `full` mode.
 - `--images-dir`: uses supported local images from a folder.
 - `--image-paths`: uses explicit local image file paths.
 - `--use-ai-images`: generates OpenAI scene images during `full` mode.
 - `--image-count`: controls how many AI scene images to request.
 - `--organize`: copies successful run outputs into a timestamped folder under `outputs/runs/`.
-- `--template`: selects the local video style template.
-- `--caption-offset`: adjusts generated caption timing in `full` mode.
-- `--run-folder`: points `upload-check` and `upload` modes at an organized run folder.
-- `--privacy-status`: sets YouTube upload visibility for `upload` mode. Defaults to `private`.
+- `--run-folder`: points `upload-check` and `upload` modes to an organized run folder under `outputs/runs/`.
+- `--privacy-status`: controls YouTube visibility for `upload` mode. Use `private` by default.
 
 The default topic is:
 
@@ -50,13 +48,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Create a local `.env` file in the repo root and add your API values.
-
-Do not commit `.env`.
+Create a local `.env` file in the repo root and add your API values. Do not commit `.env`.
 
 ## Environment Variables
 
-Required local `.env` variables:
+Expected local `.env` values:
 
 ```bash
 OPENAI_API_KEY=your_key_here
@@ -68,282 +64,130 @@ YOUTUBE_TOKEN_FILE=youtube_token.json
 YOUTUBE_PRIVACY_STATUS=private
 ```
 
-- `OPENAI_API_KEY`: required for modes that generate scripts and for OpenAI-generated scene images: `script`, `captions`, `metadata`, `voiceover`, `full`, and `full --use-ai-images`.
-- `ELEVENLABS_API_KEY`: required for modes that generate ElevenLabs audio: `voiceover` and `full`.
-- `ELEVENLABS_VOICE_ID`: required for predictable ElevenLabs voice generation. It must match a valid voice available to the configured ElevenLabs account.
-- `YOUTUBE_API_KEY`: placeholder for future non-upload use. YouTube uploads use OAuth, not this API key.
-- `YOUTUBE_CLIENT_SECRETS_FILE`: local OAuth client secret file path for manual YouTube uploads. Do not commit this file.
-- `YOUTUBE_TOKEN_FILE`: local OAuth token cache path for manual YouTube uploads. Do not commit this file.
-- `YOUTUBE_PRIVACY_STATUS`: default upload visibility. Defaults to `private`.
+- `OPENAI_API_KEY`: required for modes that generate scripts and for OpenAI-generated scene images.
+- `ELEVENLABS_API_KEY`: required for modes that generate ElevenLabs audio.
+- `ELEVENLABS_VOICE_ID`: required for predictable ElevenLabs voice generation.
+- `YOUTUBE_API_KEY`: placeholder for possible future non-upload use. It is not used for uploads.
+- `YOUTUBE_CLIENT_SECRETS_FILE`: local OAuth desktop client JSON file path. Default: `client_secret.json`.
+- `YOUTUBE_TOKEN_FILE`: local OAuth token cache path created after the first successful browser authorization. Default: `youtube_token.json`.
+- `YOUTUBE_PRIVACY_STATUS`: default upload visibility. Default: `private`.
 
-Never commit real API keys, private values, OAuth client secrets, OAuth tokens, or `.env`.
+YouTube uploads require OAuth. They do not use `YOUTUBE_API_KEY`.
+
+## YouTube OAuth Setup
+
+Manual upload uses Google OAuth desktop credentials:
+
+1. In Google Cloud Console, create or select a project.
+2. Enable the YouTube Data API v3.
+3. Configure the OAuth consent screen.
+4. Create an OAuth client ID for a desktop app.
+5. Download the OAuth client JSON.
+6. Save it locally as `client_secret.json` or set `YOUTUBE_CLIENT_SECRETS_FILE` to its local path.
+
+On the first successful upload attempt, the browser OAuth flow opens. After you authorize the correct YouTube account/channel, the pipeline writes `youtube_token.json` locally. Future uploads reuse that token and should not re-open OAuth every time.
+
+Deleting `youtube_token.json` forces a new OAuth authorization flow. If you accidentally authorize the wrong YouTube account or channel, delete `youtube_token.json` and run upload again with the correct account.
+
+`client_secret.json` and `youtube_token.json` must never be committed.
 
 ## CLI Usage
 
-Generate and save a script only:
+Generate a script:
 
 ```bash
 python main.py --mode script
 ```
 
-Generate a script and SRT captions:
+Generate captions:
 
 ```bash
 python main.py --mode captions
 ```
 
-Generate a script and local YouTube-ready metadata JSON:
+Generate metadata:
 
 ```bash
 python main.py --mode metadata
 ```
 
-Generate a script and ElevenLabs voiceover:
+Generate voiceover:
 
 ```bash
 python main.py --mode voiceover
 ```
 
-Create a local test MP3 without OpenAI or ElevenLabs API calls:
+Create local test audio:
 
 ```bash
 python main.py --mode test-audio
 ```
 
-Build a vertical MP4 from an existing audio file:
+Build a video from existing audio:
 
 ```bash
 python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3
 ```
 
-Build a vertical MP4 from an existing audio file and burn in captions from an existing SRT file:
+Build a captioned video:
 
 ```bash
 python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt
 ```
 
-Build a captioned video with explicit local image files:
-
-```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
-```
-
-Build a captioned video with supported local images from a folder:
-
-```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --images-dir /path/to/images
-```
-
-Run the full local pipeline:
-
-```bash
-python main.py --mode full
-```
-
-Run the full local pipeline with the AI template and organized outputs:
-
-```bash
-python main.py --mode full --template ai --organize
-```
-
-Run the full local pipeline with OpenAI-generated scene images:
-
-```bash
-python main.py --mode full --template ai --organize --use-ai-images
-```
-
-Request fewer AI scene images for cheaper testing:
+Generate a complete organized run with AI scene images:
 
 ```bash
 python main.py --mode full --template ai --organize --use-ai-images --image-count 3
 ```
 
-Request more AI scene images for better visual variety:
-
-```bash
-python main.py --mode full --template ai --organize --use-ai-images --image-count 5
-```
-
-Check whether an organized run folder has the files expected for future upload:
+Validate an organized run folder before upload:
 
 ```bash
 python main.py --mode upload-check --run-folder outputs/runs/<run-folder-name>
 ```
 
-Upload a validated organized run folder to YouTube as a private video:
-
-```bash
-python main.py --mode upload --run-folder outputs/runs/<run-folder-name>
-```
-
-Upload with an explicit privacy status:
+Upload a validated run folder privately:
 
 ```bash
 python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --privacy-status private
 ```
 
-Use a custom topic with any mode that accepts the topic as input:
+Use a custom topic with any mode that accepts topic input:
 
 ```bash
 python main.py --mode script --topic "How small businesses use AI assistants"
 ```
 
-## Video Templates
+## Successful Manual Upload Workflow
 
-`tools/video_builder.py` creates local vertical MP4 videos and supports these templates:
-
-- `default`
-- `bold`
-- `minimal`
-- `ai`
-
-Select a template with `--template`, for example:
-
-```bash
-python main.py --mode full --template ai
-```
-
-## Caption Behavior
-
-`tools/captions.py` saves generated SRT captions under `outputs/captions/`.
-
-`tools/video_builder.py` can burn captions into generated MP4 videos when a valid SRT file is provided with `--captions-path`.
-
-Caption burn-in is available in:
-
-- `video` mode when `--captions-path` points to an existing `.srt` file.
-- `full` mode as part of the generated script, caption, metadata, audio, and video flow.
-
-If `--captions-path` is not provided in `video` mode, the video is built from the audio file without burned-in captions.
-
-In `full` mode, generated caption timing can be adjusted with `--caption-offset`. The default offset is `0.5` seconds.
-
-## Metadata Generation
-
-`metadata` mode generates a script and saves a local YouTube-ready metadata JSON file under:
-
-```text
-outputs/metadata/
-```
-
-Metadata files are created by `tools/metadata.py` and include:
-
-- `title`
-- `description`
-- `tags`
-- `hashtags`
-- `topic`
-- `generated_from`
-
-The metadata is local only for now. It prepares the project for future YouTube upload work, but it does not upload anything, authenticate with YouTube, or schedule publishing.
-
-Generated metadata JSON files are ignored by Git and should not be committed. The placeholder file `outputs/metadata/.gitkeep` should stay tracked so the folder exists in fresh clones.
-
-## Local Image Support
-
-Local image inputs let `video` mode use existing images as the main visual layer behind captions and template overlays.
-
-Use `--image-paths` when you want exact control over the files:
-
-```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
-```
-
-Use `--images-dir` when you want the pipeline to collect supported image files from a folder:
-
-```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --images-dir /path/to/images
-```
-
-Supported local image extensions are:
-
-- `.jpg`
-- `.jpeg`
-- `.png`
-- `.webp`
-
-Local images are not uploaded anywhere. They are used locally by the video builder as visual backgrounds.
-
-## OpenAI-Generated Image Support
-
-`full` mode can generate scene images with OpenAI when `--use-ai-images` is provided. AI-generated images are used as the main visual layer behind captions and template overlays.
-
-```bash
-python main.py --mode full --template ai --organize --use-ai-images
-```
-
-`--image-count` controls how many AI scene images to request:
+Generate a complete organized run:
 
 ```bash
 python main.py --mode full --template ai --organize --use-ai-images --image-count 3
-python main.py --mode full --template ai --organize --use-ai-images --image-count 5
 ```
 
-- AI image generation uses `OPENAI_API_KEY`.
-- AI image generation may use extra API credits.
-- Use `--image-count 3` for cheaper testing.
-- Use `--image-count 5` for better visual variety.
-- AI images are generated locally into `outputs/images/`.
-- No stock media search is built yet.
-- No internet image downloads are built yet.
-
-## Video Templates
-
-The `--template` option selects a built-in local video template. Templates control the visual treatment used by `tools/video_builder.py`, including the look of the generated vertical video and overlays.
-
-Example:
+Validate the newest run folder:
 
 ```bash
-python main.py --mode full --template ai --organize
+python main.py --mode upload-check --run-folder "$(ls -td outputs/runs/*/ | head -1)"
 ```
 
-Image inputs and AI-generated images work as the main visual layer behind the selected template's captions and overlays.
+Upload privately:
 
-## Burned-In Captions
-
-`tools/captions.py` saves generated SRT captions under `outputs/captions/`.
-
-`tools/video_builder.py` can burn captions into generated MP4 videos when a valid SRT file is provided with `--captions-path`.
-
-Caption burn-in is available in:
-
-- `video` mode when `--captions-path` points to an existing `.srt` file.
-- `full` mode as part of the generated script, caption, metadata, audio, and video flow.
-
-If `--captions-path` is not provided in `video` mode, the video is built from the audio file without burned-in captions.
-
-## Run-Folder Organization
-
-The optional `--organize` flag copies successful run outputs into a timestamped folder under:
-
-```text
-outputs/runs/
+```bash
+python main.py --mode upload --run-folder "$(ls -td outputs/runs/*/ | head -1)" --privacy-status private
 ```
 
-Run-folder organization is handled by `tools/run_folder.py`. It copies the outputs from the successful command into a run-specific folder so the generated assets for that run can be reviewed together.
-
-The original generated files remain in their standard output folders. The run folder is an organized copy, not the only location where the generated assets are stored.
-
-A complete organized `full` run should contain:
-
-- `script.txt`
-- `captions.srt`
-- `metadata.json`
-- `audio.mp3`
-- `video.mp4`
-- `images/` if image copying is implemented
-
-Generated run folders are ignored by Git and should not be committed. The placeholder file `outputs/runs/.gitkeep` should stay tracked so the folder exists in fresh clones.
+After upload, review the video in YouTube Studio before publishing. Private uploads are visible only in the correct authorized YouTube Studio channel.
 
 ## Upload Readiness Checks
 
-`upload-check` mode validates an organized run folder before manual YouTube upload:
+`upload-check` validates a run folder before upload. It does not upload anything, call YouTube, require OAuth, or use YouTube API keys.
 
 ```bash
 python main.py --mode upload-check --run-folder outputs/runs/<run-folder-name>
 ```
-
-`upload-check` does not upload anything, does not call YouTube, does not require OAuth, and does not require YouTube API keys.
 
 Required files:
 
@@ -355,6 +199,7 @@ Recommended files:
 - `captions.srt`
 - `script.txt`
 - `audio.mp3`
+- `images/` when image copying is available
 
 `metadata.json` must be valid JSON and include:
 
@@ -365,149 +210,197 @@ Recommended files:
 - `topic`
 - `generated_from`
 
-`title` and `description` must be non-empty strings. `tags` and `hashtags` must be lists. `video.mp4` must exist, be non-empty, and have a readable duration greater than zero when local MoviePy validation can read it.
-
-`ready: true` means the local package is valid for future upload work. `ready: false` means the folder is missing required upload files or has invalid metadata.
+`ready: true` means the local package is valid for upload. `ready: false` means the folder is missing required upload files or has invalid metadata.
 
 ## Manual YouTube Upload
 
-`upload` mode uploads an existing organized run folder to YouTube. It does not generate a script, captions, metadata, audio, images, or video.
-
-```bash
-python main.py --mode upload --run-folder outputs/runs/<run-folder-name>
-```
-
-Before uploading, `upload` mode runs the same validation as `upload-check`. If the run folder is not ready, the command fails before starting OAuth or uploading anything.
-
-Upload requirements:
-
-- `video.mp4`
-- `metadata.json`
-- local OAuth client secret file from `YOUTUBE_CLIENT_SECRETS_FILE`
-- local OAuth token file from `YOUTUBE_TOKEN_FILE`, created on first successful OAuth flow
-
-`metadata.json` supplies the YouTube title, description, tags, and hashtags. Hashtags are appended to the description when they are not already included.
-
-Uploads use OAuth 2.0 installed app flow and the YouTube Data API. `YOUTUBE_API_KEY` is not used for uploads.
-
-Uploads default to `private` for safety. You can override this with:
+`upload` uploads `video.mp4` from a validated organized run folder using `metadata.json`.
 
 ```bash
 python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --privacy-status private
 ```
 
-Valid privacy status values are `private`, `unlisted`, and `public`.
+Upload behavior:
 
-OAuth client secret files and token files are local credentials and must not be committed.
+- `--run-folder` points to the organized run folder under `outputs/runs/`.
+- `--privacy-status` controls YouTube visibility. Valid values are `private`, `unlisted`, and `public`.
+- `private` is recommended by default for safety.
+- The upload validates the run folder first and stops before OAuth or upload if validation fails.
+- The upload uses `title`, `description`, `tags`, and `hashtags` from `metadata.json`.
+- Hashtags are appended to the description if they are not already included.
+- The upload does not generate scripts, captions, metadata, audio, images, or video.
+- The upload uses YouTube OAuth, not `YOUTUBE_API_KEY`.
+
+## OAuth Token Behavior
+
+The first successful browser OAuth flow creates `youtube_token.json` locally at the path configured by `YOUTUBE_TOKEN_FILE`.
+
+`youtube_token.json` lets future uploads reuse authorization without re-opening OAuth every time. If the token expires and has a refresh token, the client refreshes it locally.
+
+Delete `youtube_token.json` when:
+
+- You authorized the wrong Google or YouTube account.
+- You need to switch YouTube channels.
+- You want to force a fresh OAuth authorization flow.
+
+Keep both OAuth files local:
+
+- `client_secret.json`: downloaded from Google Cloud OAuth desktop credentials.
+- `youtube_token.json`: created locally after browser authorization.
+
+## Video Templates
+
+`tools/video_builder.py` creates local vertical MP4 videos and supports these templates:
+
+- `default`
+- `bold`
+- `minimal`
+- `ai`
+
+Select a template with `--template`:
+
+```bash
+python main.py --mode full --template ai
+```
+
+## Captions
+
+`tools/captions.py` saves generated SRT captions under `outputs/captions/`.
+
+`tools/video_builder.py` can burn captions into generated MP4 videos when a valid SRT file is provided with `--captions-path`.
+
+Caption burn-in is available in:
+
+- `video` mode when `--captions-path` points to an existing `.srt` file.
+- `full` mode as part of the generated script, caption, metadata, audio, and video flow.
+
+In `full` mode, generated caption timing can be adjusted with `--caption-offset`. The default offset is `0.5` seconds.
+
+## Image Support
+
+Local images and OpenAI-generated images are used as the main visual layer behind captions and template overlays.
+
+Use explicit local image paths:
+
+```bash
+python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
+```
+
+Use a local image folder:
+
+```bash
+python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --images-dir /path/to/images
+```
+
+Supported local image extensions:
+
+- `.jpg`
+- `.jpeg`
+- `.png`
+- `.webp`
+
+Generate AI scene images in `full` mode:
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images --image-count 3
+```
+
+AI image generation uses `OPENAI_API_KEY`, may use extra API credits, and writes generated images to `outputs/images/`.
 
 ## Output Folders
 
 Generated outputs are written under `outputs/` and `memory/`:
 
-- `outputs/scripts/`: generated `.txt` scripts from `tools/file_writer.py`.
-- `outputs/captions/`: generated `.srt` captions from `tools/captions.py`.
-- `outputs/metadata/`: generated `.json` metadata files from `tools/metadata.py`.
-- `outputs/audio/`: generated ElevenLabs `.mp3` audio from `tools/voiceover.py` and local test `.mp3` files from `tools/test_audio.py`.
-- `outputs/videos/`: generated `.mp4` videos from `tools/video_builder.py`.
-- `outputs/images/`: generated OpenAI scene images from `tools/image_generator.py`.
-- `outputs/runs/`: timestamped organized copies of successful run outputs from `tools/run_folder.py`.
-- `memory/logs.json`: successful run log maintained by `tools/logger.py`.
+- `outputs/scripts/`: generated `.txt` scripts.
+- `outputs/captions/`: generated `.srt` captions.
+- `outputs/metadata/`: generated `.json` metadata files.
+- `outputs/audio/`: generated ElevenLabs `.mp3` audio and local test `.mp3` files.
+- `outputs/videos/`: generated `.mp4` videos.
+- `outputs/images/`: generated OpenAI scene images.
+- `outputs/runs/`: timestamped organized copies of successful run outputs.
+- `memory/logs.json`: successful generation run log.
 
-`outputs/images/` stores generated AI scene images. Generated image files should not be committed. The placeholder file `outputs/images/.gitkeep` should stay tracked if present so the folder exists in fresh clones.
+A complete organized `full` run can contain:
+
+- `script.txt`
+- `captions.srt`
+- `metadata.json`
+- `audio.mp3`
+- `video.mp4`
+- `images/` if image copying is implemented
 
 Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, and generated run folders are ignored by Git and should not be committed.
 
 ## Logging Behavior
 
-Successful pipeline runs are logged to:
+Successful generation pipeline runs are logged to:
 
 ```text
 memory/logs.json
 ```
 
-The log file should always contain a JSON array. Each successful pipeline run appends one entry with:
+The log file should always contain a JSON array. Failed runs are not logged. `upload-check` is validation-only and `upload` is a manual publishing action, so neither should add local generation pipeline run entries.
 
-- `timestamp`
-- `topic`
-- `mode`
-- `outputs`
+Local test log entries should not be committed. Before committing, make sure `memory/logs.json` is still a valid JSON array.
 
-Example shape:
+## Security
 
-```json
-[
-  {
-    "timestamp": "2026-04-28T12:00:00+00:00",
-    "topic": "How people are making money with AI in 2026",
-    "mode": "metadata",
-    "outputs": {
-      "script": "outputs/scripts/how_people_are_making_money_with_ai_in_2026.txt",
-      "metadata": "outputs/metadata/how-people-are-making-money-with-ai-in-2026.json"
-    }
-  }
-]
-```
+Never commit:
 
-Failed runs are not logged. `upload-check` is validation-only and `upload` is a manual publishing action, so neither should add local generation pipeline run entries. Local test log entries should not be committed. Before committing, make sure `memory/logs.json` is still a valid JSON array and that local test entries are not staged.
+- `.env`
+- `client_secret.json`
+- `youtube_token.json`
+- any `client_secret*.json`, `credentials*.json`, or `token*.json` file
+- generated output files
+- generated run folders
+- local test log entries in `memory/logs.json`
+
+Credential and token files are ignored by Git, but still check staging before every commit.
 
 ## Troubleshooting
 
-If `script`, `captions`, `metadata`, `voiceover`, or `full` fails with an OpenAI API error, confirm `OPENAI_API_KEY` is set in `.env`.
+If `upload` fails with `--run-folder is required`, pass an organized run folder:
 
-If `full --use-ai-images` fails with an OpenAI API error, confirm `OPENAI_API_KEY` is set in `.env` and the account has access to image generation.
+```bash
+python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --privacy-status private
+```
 
-If `voiceover` or `full` fails with an ElevenLabs API error, confirm `ELEVENLABS_API_KEY` is set in `.env`.
+If `upload-check` fails, confirm the run folder contains `video.mp4` and `metadata.json`.
 
-If ElevenLabs audio generation fails because the voice cannot be found or used, confirm `ELEVENLABS_VOICE_ID` is set and matches a valid voice available to the configured ElevenLabs account.
+If `upload` cannot find `client_secret.json`, download OAuth desktop credentials from Google Cloud and save the file locally, or update `YOUTUBE_CLIENT_SECRETS_FILE`.
 
-If `--image-count` fails validation, use a value greater than `0`. Use `3` for cheaper testing and `5` for better visual variety.
+If `youtube_token.json` is missing on the first upload, that is normal. The browser OAuth flow should open and create it after successful authorization.
 
-If local image inputs fail, confirm each `--image-paths` value points to an existing supported file: `.jpg`, `.jpeg`, `.png`, or `.webp`.
+If the browser OAuth flow opens, authorize the exact Google account and YouTube channel you want to upload to.
 
-If `--images-dir` produces no images, confirm the folder exists and contains at least one supported image file.
+If you accidentally authorize the wrong YouTube channel or account, delete `youtube_token.json` and run upload again.
 
-If `video` mode fails with a missing audio path, provide `--audio-path` pointing to an existing `.mp3` file.
+If a private video is not visible, confirm you are viewing the correct YouTube Studio channel for the account used during OAuth.
 
-If caption burn-in fails, confirm `--captions-path` points to an existing valid `.srt` file.
+If an upload fails and you are checking `YOUTUBE_API_KEY`, remember that uploads do not use `YOUTUBE_API_KEY`; they require OAuth.
 
-If `upload-check` fails immediately, confirm `--run-folder` points to an existing organized run folder under `outputs/runs/`.
-
-If `upload` fails before OAuth, run `python main.py --mode upload-check --run-folder outputs/runs/<run-folder-name>` and fix the reported validation errors.
-
-If `upload` cannot find OAuth client secrets, confirm `YOUTUBE_CLIENT_SECRETS_FILE` points to a local Google OAuth client JSON file.
-
-If `upload` starts OAuth for the first time, complete the browser flow. The resulting token is saved locally to `YOUTUBE_TOKEN_FILE` and should not be committed.
+If credential or token files appear in ignored status, that is expected. They must remain ignored and unstaged.
 
 If generated files do not appear in `git status`, that is expected. Generated outputs, generated image files, and generated run folders are ignored by Git.
 
 If `memory/logs.json` errors during logging, make sure the file contains valid JSON and that the top-level value is an array.
 
-If you want to test video creation without API calls, run:
-
-```bash
-python main.py --mode test-audio
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3
-```
-
 ## Current Limitations / Not Built Yet
 
-- No automatic YouTube upload yet.
-- No stock footage search yet.
-- No internet image download pipeline yet.
+- No thumbnail generation/support yet.
+- No automatic custom thumbnail upload yet.
 - No scheduling yet.
+- No stock footage search yet.
 - No topic research yet.
 - No analytics yet.
 - No automatic performance feedback loop yet.
 
 ## Suggested Next Milestones
 
-These are future options only and are not implemented yet:
-
-- Test and tune AI image prompt quality.
-- Document recommended templates/settings.
-- Add automated YouTube upload workflow controls.
+- Add thumbnail generation/support.
+- Add thumbnail upload support.
+- Improve image prompt quality.
 - Add stock footage or background media search.
 - Add topic research.
 - Add scheduling.
 - Add analytics and performance logging.
-- Add automatic performance feedback loop.
