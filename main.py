@@ -16,6 +16,7 @@ from tools.text_cleaner import clean_narration_text, ensure_call_to_action
 from tools.upload_check import validate_upload_package
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
+from tools.youtube_api import upload_video_from_run_folder
 
 
 DEFAULT_TOPIC = "How people are making money with AI in 2026"
@@ -36,6 +37,7 @@ def parse_args():
             "captions",
             "metadata",
             "upload-check",
+            "upload",
         ],
         default="full",
         help="Pipeline mode to run.",
@@ -91,7 +93,11 @@ def parse_args():
     )
     parser.add_argument(
         "--run-folder",
-        help="Organized run folder path required when --mode upload-check.",
+        help="Organized run folder path required when --mode upload-check or --mode upload.",
+    )
+    parser.add_argument(
+        "--privacy-status",
+        help="YouTube privacy status for --mode upload: private, unlisted, or public.",
     )
     return parser.parse_args()
 
@@ -136,6 +142,17 @@ def main():
 
         validation_result = validate_upload_package(args.run_folder)
         print(json.dumps(validation_result, indent=2))
+        return
+
+    if args.mode == "upload":
+        if not args.run_folder:
+            raise ValueError("--run-folder is required when --mode upload")
+
+        upload_result = upload_video_from_run_folder(
+            args.run_folder,
+            privacy_status=args.privacy_status,
+        )
+        print(json.dumps(upload_result, indent=2))
         return
 
     if args.mode in ["full", "video"]:
