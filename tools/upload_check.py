@@ -5,7 +5,7 @@ from moviepy import VideoFileClip
 
 
 REQUIRED_FILES = ("video.mp4", "metadata.json")
-RECOMMENDED_FILES = ("captions.srt", "script.txt", "audio.mp3")
+RECOMMENDED_FILES = ("captions.srt", "script.txt", "audio.mp3", "thumbnail.png")
 REQUIRED_METADATA_FIELDS = (
     "title",
     "description",
