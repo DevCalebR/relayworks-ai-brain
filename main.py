@@ -6,6 +6,7 @@ from moviepy import AudioFileClip
 from agents.script_agent import generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
+from tools.image_generator import generate_scene_images
 from tools.image_inputs import collect_image_paths
 from tools.logger import log_pipeline_run
 from tools.metadata import save_video_metadata
@@ -78,6 +79,17 @@ def parse_args():
         help="Caption start offset in seconds used when full mode has audio duration.",
     )
     parser.add_argument(
+        "--use-ai-images",
+        action="store_true",
+        help="Generate OpenAI scene images for full-mode videos.",
+    )
+    parser.add_argument(
+        "--image-count",
+        type=int,
+        default=5,
+        help="Number of AI scene images to generate when --use-ai-images is set.",
+    )
+    parser.add_argument(
         "--run-folder",
         help="Organized run folder path required when --mode upload-check.",
     )
@@ -114,6 +126,9 @@ def main():
     args = parse_args()
     topic = args.topic
     image_paths = []
+
+    if args.image_count <= 0:
+        raise ValueError("--image-count must be greater than 0")
 
     if args.mode == "upload-check":
         if not args.run_folder:
@@ -205,6 +220,22 @@ def main():
 
         print("\nSaved metadata path:")
         print(metadata_path)
+
+        if args.use_ai_images:
+            image_paths = generate_scene_images(
+                topic,
+                narration_text,
+                topic,
+                image_count=args.image_count,
+                template=args.template,
+            )
+            outputs["images"] = image_paths
+            outputs["ai_images_used"] = True
+            outputs["image_count"] = len(image_paths)
+
+            print("\nSaved AI image paths:")
+            for image_path in image_paths:
+                print(image_path)
 
     audio_path = generate_voiceover(narration_text, topic)
     outputs["audio"] = audio_path

@@ -43,6 +43,26 @@ def organize_run_outputs(topic, outputs):
     for output_name, output_path in outputs.items():
         destination_name = OUTPUT_FILENAMES.get(output_name)
 
+        if output_name == "images" and isinstance(output_path, list):
+            images_folder = run_folder / "images"
+            images_folder.mkdir(parents=True, exist_ok=True)
+            copied_images = []
+
+            for image_path in output_path:
+                source_path = Path(image_path)
+
+                if not source_path.exists():
+                    continue
+
+                destination_path = images_folder / source_path.name
+                shutil.copy2(source_path, destination_path)
+                copied_images.append(str(destination_path))
+
+            if copied_images:
+                copied_outputs[output_name] = copied_images
+
+            continue
+
         if not destination_name:
             continue
 

@@ -221,7 +221,12 @@ def _create_background_clip(template_config, duration):
 
 
 def _create_cover_image_clip(image_path, duration, start_time=0):
-    image_clip = ImageClip(str(image_path), duration=duration)
+    image_file = Path(image_path)
+
+    if not image_file.exists():
+        raise FileNotFoundError(f"Image file does not exist: {image_path}")
+
+    image_clip = ImageClip(str(image_file), duration=duration)
     image_width, image_height = image_clip.size
     video_width, video_height = VIDEO_SIZE
     scale = max(video_width / image_width, video_height / image_height)
@@ -363,6 +368,7 @@ def build_video(
         output_name: Human-readable name used for the output filename.
         captions_path: Optional SRT captions file to burn into the video.
         template: Built-in visual template name.
+        image_paths: Optional image paths to use as the main visual layer.
         image_paths: Optional local image paths to use as the main visual layer.
 
     Returns:
