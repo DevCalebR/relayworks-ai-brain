@@ -26,6 +26,9 @@ The pipeline also supports:
 - `--use-ai-images`: generates OpenAI scene images during `full` mode.
 - `--image-count`: controls how many AI scene images to request.
 - `--organize`: copies successful run outputs into a timestamped folder under `outputs/runs/`.
+- `--template`: selects the local video style template.
+- `--caption-offset`: adjusts generated caption timing in `full` mode.
+- `--run-folder`: points `upload-check` mode at an organized run folder.
 
 The default topic is:
 
@@ -40,19 +43,18 @@ You can override it with `--topic "your topic here"` for modes that generate top
 From the repo root:
 
 ```bash
-cp .env.example .env
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Then add your local API values to `.env`.
+Create a local `.env` file in the repo root and add your API values.
 
 Do not commit `.env`.
 
 ## Environment Variables
 
-`.env.example` documents the expected variables:
+Required local `.env` variables:
 
 ```bash
 OPENAI_API_KEY=your_key_here
@@ -63,8 +65,8 @@ YOUTUBE_API_KEY=your_key_here
 
 - `OPENAI_API_KEY`: required for modes that generate scripts and for OpenAI-generated scene images: `script`, `captions`, `metadata`, `voiceover`, `full`, and `full --use-ai-images`.
 - `ELEVENLABS_API_KEY`: required for modes that generate ElevenLabs audio: `voiceover` and `full`.
-- `ELEVENLABS_VOICE_ID`: required for ElevenLabs voice generation. It must match a valid voice available to the configured ElevenLabs account.
-- `YOUTUBE_API_KEY`: placeholder for future use. The current pipeline does not upload to YouTube.
+- `ELEVENLABS_VOICE_ID`: required for predictable ElevenLabs voice generation. It must match a valid voice available to the configured ElevenLabs account.
+- `YOUTUBE_API_KEY`: placeholder for future use. The current pipeline does not call YouTube.
 
 Never commit real API keys, private values, or `.env`.
 
@@ -165,6 +167,36 @@ Use a custom topic with any mode that accepts the topic as input:
 ```bash
 python main.py --mode script --topic "How small businesses use AI assistants"
 ```
+
+## Video Templates
+
+`tools/video_builder.py` creates local vertical MP4 videos and supports these templates:
+
+- `default`
+- `bold`
+- `minimal`
+- `ai`
+
+Select a template with `--template`, for example:
+
+```bash
+python main.py --mode full --template ai
+```
+
+## Caption Behavior
+
+`tools/captions.py` saves generated SRT captions under `outputs/captions/`.
+
+`tools/video_builder.py` can burn captions into generated MP4 videos when a valid SRT file is provided with `--captions-path`.
+
+Caption burn-in is available in:
+
+- `video` mode when `--captions-path` points to an existing `.srt` file.
+- `full` mode as part of the generated script, caption, metadata, audio, and video flow.
+
+If `--captions-path` is not provided in `video` mode, the video is built from the audio file without burned-in captions.
+
+In `full` mode, generated caption timing can be adjusted with `--caption-offset`. The default offset is `0.5` seconds.
 
 ## Metadata Generation
 
@@ -272,7 +304,7 @@ Run-folder organization is handled by `tools/run_folder.py`. It copies the outpu
 
 The original generated files remain in their standard output folders. The run folder is an organized copy, not the only location where the generated assets are stored.
 
-Organized full runs can contain:
+A complete organized `full` run should contain:
 
 - `script.txt`
 - `captions.srt`
@@ -282,6 +314,40 @@ Organized full runs can contain:
 - `images/` if image copying is implemented
 
 Generated run folders are ignored by Git and should not be committed. The placeholder file `outputs/runs/.gitkeep` should stay tracked so the folder exists in fresh clones.
+
+## Upload Readiness Checks
+
+`upload-check` mode validates an organized run folder before future YouTube upload work:
+
+```bash
+python main.py --mode upload-check --run-folder outputs/runs/<run-folder-name>
+```
+
+`upload-check` does not upload anything, does not call YouTube, does not require OAuth, and does not require YouTube API keys.
+
+Required files:
+
+- `video.mp4`
+- `metadata.json`
+
+Recommended files:
+
+- `captions.srt`
+- `script.txt`
+- `audio.mp3`
+
+`metadata.json` must be valid JSON and include:
+
+- `title`
+- `description`
+- `tags`
+- `hashtags`
+- `topic`
+- `generated_from`
+
+`title` and `description` must be non-empty strings. `tags` and `hashtags` must be lists. `video.mp4` must exist, be non-empty, and have a readable duration greater than zero when local MoviePy validation can read it.
+
+`ready: true` means the local package is valid for future upload work. `ready: false` means the folder is missing required upload files or has invalid metadata.
 
 ## Output Folders
 
@@ -312,13 +378,13 @@ This is a local readiness check only. It does not upload to YouTube, authenticat
 
 ## Logging Behavior
 
-Successful CLI runs are logged to:
+Successful pipeline runs are logged to:
 
 ```text
 memory/logs.json
 ```
 
-The log file should always contain a JSON array. Each successful run appends one entry with:
+The log file should always contain a JSON array. Each successful pipeline run appends one entry with:
 
 - `timestamp`
 - `topic`
@@ -341,7 +407,7 @@ Example shape:
 ]
 ```
 
-Failed runs are not logged. Local test log entries should not be committed. Before committing, make sure `memory/logs.json` is still a valid JSON array and that local test entries are not staged.
+Failed runs are not logged. `upload-check` is validation-only and should not add local pipeline run entries. Local test log entries should not be committed. Before committing, make sure `memory/logs.json` is still a valid JSON array and that local test entries are not staged.
 
 ## Troubleshooting
 
@@ -395,6 +461,9 @@ These are future options only and are not implemented yet:
 - Document recommended templates/settings.
 - Add YouTube OAuth and upload.
 - Add stock footage or background media search.
+- Add YouTube OAuth and upload.
+- Add stock footage or background media.
 - Add topic research.
 - Add scheduling.
 - Add analytics and performance logging.
+- Add automatic performance feedback loop.
