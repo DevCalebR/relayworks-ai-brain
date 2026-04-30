@@ -13,6 +13,7 @@ from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
 from tools.text_cleaner import clean_narration_text, ensure_call_to_action
+from tools.thumbnail_generator import generate_thumbnail
 from tools.upload_check import validate_upload_package
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
@@ -38,6 +39,7 @@ def parse_args():
             "metadata",
             "upload-check",
             "upload",
+            "thumbnail",
         ],
         default="full",
         help="Pipeline mode to run.",
@@ -84,6 +86,20 @@ def parse_args():
         "--use-ai-images",
         action="store_true",
         help="Generate OpenAI scene images for full-mode videos.",
+    )
+    parser.add_argument(
+        "--generate-thumbnail",
+        action="store_true",
+        help="Generate a local thumbnail during full mode.",
+    )
+    parser.add_argument(
+        "--thumbnail-source",
+        help="Optional local source image path for --mode thumbnail.",
+    )
+    parser.add_argument(
+        "--use-ai-thumbnail",
+        action="store_true",
+        help="Generate a thumbnail background with OpenAI.",
     )
     parser.add_argument(
         "--image-count",
@@ -153,6 +169,22 @@ def main():
             privacy_status=args.privacy_status,
         )
         print(json.dumps(upload_result, indent=2))
+        return
+
+    if args.mode == "thumbnail":
+        thumbnail_source_paths = (
+            [args.thumbnail_source] if args.thumbnail_source else None
+        )
+        thumbnail_path = generate_thumbnail(
+            topic,
+            topic,
+            source_image_paths=thumbnail_source_paths,
+            use_ai=args.use_ai_thumbnail,
+            template=args.template,
+        )
+
+        print("\nSaved thumbnail path:")
+        print(thumbnail_path)
         return
 
     if args.mode in ["full", "video"]:
@@ -253,6 +285,24 @@ def main():
             print("\nSaved AI image paths:")
             for image_path in image_paths:
                 print(image_path)
+
+        if args.generate_thumbnail:
+            thumbnail_source_paths = None
+
+            if image_paths and not args.use_ai_thumbnail:
+                thumbnail_source_paths = [image_paths[0]]
+
+            thumbnail_path = generate_thumbnail(
+                topic,
+                topic,
+                source_image_paths=thumbnail_source_paths,
+                use_ai=args.use_ai_thumbnail,
+                template=args.template,
+            )
+            outputs["thumbnail"] = thumbnail_path
+
+            print("\nSaved thumbnail path:")
+            print(thumbnail_path)
 
     audio_path = generate_voiceover(narration_text, topic)
     outputs["audio"] = audio_path

@@ -11,6 +11,7 @@ OUTPUT_FILENAMES = {
     "metadata": "metadata.json",
     "audio": "audio.mp3",
     "video": "video.mp4",
+    "thumbnail": "thumbnail.png",
 }
 
 

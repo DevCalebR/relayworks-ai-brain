@@ -1,8 +1,8 @@
 # RelayWorks AI Content Brain
 
-RelayWorks AI Content Brain is a local Python pipeline for producing short-form video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
+RelayWorks AI Content Brain is a local Python pipeline for producing short-form video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
 
-The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, topic research, analytics, and thumbnail generation are not built yet.
+The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, topic research, analytics, and automatic YouTube thumbnail upload are not built yet.
 
 ## Current Pipeline Status
 
@@ -15,6 +15,7 @@ The pipeline currently supports these CLI modes:
 - `test-audio`: creates a local test MP3 without API calls.
 - `video`: builds an MP4 from an existing audio file, optionally using burned-in captions and local image inputs.
 - `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and optional OpenAI-generated scene images.
+- `thumbnail`: generates a local 1280x720 thumbnail image without generating a video or calling YouTube.
 - `upload-check`: validates an organized run folder before upload.
 - `upload`: uploads `video.mp4` from a validated organized run folder using `metadata.json`.
 
@@ -26,6 +27,9 @@ Common options:
 - `--image-paths`: uses explicit local image file paths.
 - `--use-ai-images`: generates OpenAI scene images during `full` mode.
 - `--image-count`: controls how many AI scene images to request.
+- `--generate-thumbnail`: generates a local thumbnail during `full` mode.
+- `--thumbnail-source`: uses a local source image for `thumbnail` mode.
+- `--use-ai-thumbnail`: uses OpenAI to generate a thumbnail background.
 - `--organize`: copies successful run outputs into a timestamped folder under `outputs/runs/`.
 - `--run-folder`: points `upload-check` and `upload` modes to an organized run folder under `outputs/runs/`.
 - `--privacy-status`: controls YouTube visibility for `upload` mode. Use `private` by default.
@@ -141,6 +145,24 @@ Generate a complete organized run with AI scene images:
 python main.py --mode full --template ai --organize --use-ai-images --image-count 3
 ```
 
+Generate a local thumbnail only:
+
+```bash
+python main.py --mode thumbnail --topic "How people are making money with AI in 2026"
+```
+
+Generate a local thumbnail from an existing image:
+
+```bash
+python main.py --mode thumbnail --topic "How people are making money with AI in 2026" --thumbnail-source /path/to/image.png
+```
+
+Generate a complete organized run with a thumbnail:
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images --image-count 3 --generate-thumbnail
+```
+
 Validate an organized run folder before upload:
 
 ```bash
@@ -199,6 +221,7 @@ Recommended files:
 - `captions.srt`
 - `script.txt`
 - `audio.mp3`
+- `thumbnail.png`
 - `images/` when image copying is available
 
 `metadata.json` must be valid JSON and include:
@@ -211,6 +234,8 @@ Recommended files:
 - `generated_from`
 
 `ready: true` means the local package is valid for upload. `ready: false` means the folder is missing required upload files or has invalid metadata.
+
+Missing `thumbnail.png` creates a warning only. It does not make upload readiness fail.
 
 ## Manual YouTube Upload
 
@@ -307,6 +332,34 @@ python main.py --mode full --template ai --organize --use-ai-images --image-coun
 
 AI image generation uses `OPENAI_API_KEY`, may use extra API credits, and writes generated images to `outputs/images/`.
 
+## Thumbnail Support
+
+`thumbnail` mode creates a local 1280x720 YouTube-ready thumbnail under `outputs/thumbnails/`.
+
+```bash
+python main.py --mode thumbnail --topic "How people are making money with AI in 2026"
+```
+
+Use `--thumbnail-source` to crop and resize an existing image as the visual base, then add a readable title overlay from the topic:
+
+```bash
+python main.py --mode thumbnail --topic "How people are making money with AI in 2026" --thumbnail-source /path/to/image.png
+```
+
+Use `--use-ai-thumbnail` to generate a thumbnail background with OpenAI, then add the local title overlay:
+
+```bash
+python main.py --mode thumbnail --topic "How people are making money with AI in 2026" --use-ai-thumbnail
+```
+
+Full mode only generates a thumbnail when `--generate-thumbnail` is provided:
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images --image-count 3 --generate-thumbnail
+```
+
+When organized, generated thumbnails are copied into the run folder as `thumbnail.png`. Thumbnail generation is local only. Automatic YouTube thumbnail upload is not built yet.
+
 ## Output Folders
 
 Generated outputs are written under `outputs/` and `memory/`:
@@ -317,6 +370,7 @@ Generated outputs are written under `outputs/` and `memory/`:
 - `outputs/audio/`: generated ElevenLabs `.mp3` audio and local test `.mp3` files.
 - `outputs/videos/`: generated `.mp4` videos.
 - `outputs/images/`: generated OpenAI scene images.
+- `outputs/thumbnails/`: generated thumbnail images.
 - `outputs/runs/`: timestamped organized copies of successful run outputs.
 - `memory/logs.json`: successful generation run log.
 
@@ -327,6 +381,7 @@ A complete organized `full` run can contain:
 - `metadata.json`
 - `audio.mp3`
 - `video.mp4`
+- `thumbnail.png`
 - `images/` if image copying is implemented
 
 Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, and generated run folders are ignored by Git and should not be committed.
@@ -383,11 +438,14 @@ If credential or token files appear in ignored status, that is expected. They mu
 
 If generated files do not appear in `git status`, that is expected. Generated outputs, generated image files, and generated run folders are ignored by Git.
 
+If thumbnail generation from a source image fails, confirm `--thumbnail-source` points to an existing image file.
+
+If `--use-ai-thumbnail` fails with an OpenAI API error, confirm `OPENAI_API_KEY` is set in `.env`.
+
 If `memory/logs.json` errors during logging, make sure the file contains valid JSON and that the top-level value is an array.
 
 ## Current Limitations / Not Built Yet
 
-- No thumbnail generation/support yet.
 - No automatic custom thumbnail upload yet.
 - No scheduling yet.
 - No stock footage search yet.
@@ -397,7 +455,7 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 
 ## Suggested Next Milestones
 
-- Add thumbnail generation/support.
+- Expand thumbnail generation/support.
 - Add thumbnail upload support.
 - Improve image prompt quality.
 - Add stock footage or background media search.

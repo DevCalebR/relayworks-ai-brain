@@ -14,7 +14,12 @@ outputs/videos/*.mp4
 outputs/captions/*.srt
 outputs/metadata/*.json
 outputs/images/*.png
+outputs/thumbnails/*.png
+outputs/thumbnails/*.jpg
+outputs/thumbnails/*.jpeg
+outputs/thumbnails/*.webp
 outputs/runs/*
 !outputs/runs/.gitkeep
 !outputs/metadata/.gitkeep
 !outputs/images/.gitkeep
+!outputs/thumbnails/.gitkeep
