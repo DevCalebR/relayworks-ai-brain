@@ -2,7 +2,7 @@
 
 RelayWorks AI Content Brain is a local Python pipeline for producing short-form video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
 
-The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, topic research, analytics, and automatic YouTube thumbnail upload are not built yet.
+The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, topic research, analytics, and automatic publishing are not built yet.
 
 ## Current Pipeline Status
 
@@ -33,6 +33,7 @@ Common options:
 - `--organize`: copies successful run outputs into a timestamped folder under `outputs/runs/`.
 - `--run-folder`: points `upload-check` and `upload` modes to an organized run folder under `outputs/runs/`.
 - `--privacy-status`: controls YouTube visibility for `upload` mode. Use `private` by default.
+- `--upload-thumbnail`: optionally uploads `thumbnail.png` from the run folder after a successful video upload.
 
 The default topic is:
 
@@ -175,6 +176,12 @@ Upload a validated run folder privately:
 python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --privacy-status private
 ```
 
+Upload a validated run folder privately and set its thumbnail:
+
+```bash
+python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --privacy-status private --upload-thumbnail
+```
+
 Use a custom topic with any mode that accepts topic input:
 
 ```bash
@@ -199,6 +206,12 @@ Upload privately:
 
 ```bash
 python main.py --mode upload --run-folder "$(ls -td outputs/runs/*/ | head -1)" --privacy-status private
+```
+
+If the run folder contains `thumbnail.png`, upload privately and set the thumbnail:
+
+```bash
+python main.py --mode upload --run-folder "$(ls -td outputs/runs/*/ | head -1)" --privacy-status private --upload-thumbnail
 ```
 
 After upload, review the video in YouTube Studio before publishing. Private uploads are visible only in the correct authorized YouTube Studio channel.
@@ -249,12 +262,21 @@ Upload behavior:
 
 - `--run-folder` points to the organized run folder under `outputs/runs/`.
 - `--privacy-status` controls YouTube visibility. Valid values are `private`, `unlisted`, and `public`.
+- `--upload-thumbnail` uploads `thumbnail.png` from the same run folder after the video upload succeeds.
 - `private` is recommended by default for safety.
 - The upload validates the run folder first and stops before OAuth or upload if validation fails.
 - The upload uses `title`, `description`, `tags`, and `hashtags` from `metadata.json`.
 - Hashtags are appended to the description if they are not already included.
 - The upload does not generate scripts, captions, metadata, audio, images, or video.
 - The upload uses YouTube OAuth, not `YOUTUBE_API_KEY`.
+
+Thumbnail upload behavior:
+
+- Thumbnail upload is optional. By default, `upload` uploads the video only.
+- `thumbnail.png` must already exist in the organized run folder when `--upload-thumbnail` is used.
+- Thumbnail upload happens after the video has uploaded successfully.
+- Missing `thumbnail.png` does not affect normal video-only uploads.
+- Thumbnail upload uses the same YouTube OAuth credentials and token as video upload.
 
 ## OAuth Token Behavior
 
@@ -358,7 +380,7 @@ Full mode only generates a thumbnail when `--generate-thumbnail` is provided:
 python main.py --mode full --template ai --organize --use-ai-images --image-count 3 --generate-thumbnail
 ```
 
-When organized, generated thumbnails are copied into the run folder as `thumbnail.png`. Thumbnail generation is local only. Automatic YouTube thumbnail upload is not built yet.
+When organized, generated thumbnails are copied into the run folder as `thumbnail.png`. Thumbnail generation is local only. To upload that file to YouTube after video upload, pass `--upload-thumbnail` in `upload` mode.
 
 ## Output Folders
 
@@ -434,6 +456,8 @@ If a private video is not visible, confirm you are viewing the correct YouTube S
 
 If an upload fails and you are checking `YOUTUBE_API_KEY`, remember that uploads do not use `YOUTUBE_API_KEY`; they require OAuth.
 
+If `--upload-thumbnail` fails, confirm `thumbnail.png` exists in the organized run folder. The file is optional for normal uploads but required when the flag is used.
+
 If credential or token files appear in ignored status, that is expected. They must remain ignored and unstaged.
 
 If generated files do not appear in `git status`, that is expected. Generated outputs, generated image files, and generated run folders are ignored by Git.
@@ -446,7 +470,7 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 
 ## Current Limitations / Not Built Yet
 
-- No automatic custom thumbnail upload yet.
+- No automatic thumbnail upload by default.
 - No scheduling yet.
 - No stock footage search yet.
 - No topic research yet.
@@ -455,8 +479,8 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 
 ## Suggested Next Milestones
 
-- Expand thumbnail generation/support.
-- Add thumbnail upload support.
+- Improve thumbnail generation/support.
+- Add thumbnail review and management workflow.
 - Improve image prompt quality.
 - Add stock footage or background media search.
 - Add topic research.

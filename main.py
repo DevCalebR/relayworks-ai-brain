@@ -115,6 +115,11 @@ def parse_args():
         "--privacy-status",
         help="YouTube privacy status for --mode upload: private, unlisted, or public.",
     )
+    parser.add_argument(
+        "--upload-thumbnail",
+        action="store_true",
+        help="Upload run-folder thumbnail.png after a successful YouTube video upload.",
+    )
     return parser.parse_args()
 
 
@@ -167,6 +172,7 @@ def main():
         upload_result = upload_video_from_run_folder(
             args.run_folder,
             privacy_status=args.privacy_status,
+            upload_thumbnail=args.upload_thumbnail,
         )
         print(json.dumps(upload_result, indent=2))
         return
