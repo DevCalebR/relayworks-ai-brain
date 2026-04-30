@@ -251,23 +251,23 @@ def _create_image_background_clip(image_paths, template_config, duration):
         raise ValueError("image_paths must contain at least one image")
 
     if len(image_paths) == 1:
-        image_clips = [_create_cover_image_clip(image_paths[0], duration)]
-    else:
-        image_clips = []
-        image_duration = duration / len(image_paths)
+        clips = [_create_cover_image_clip(image_paths[0], duration)]
+        clips.extend(_create_shape_clips(template_config, duration))
+        return CompositeVideoClip(clips, size=VIDEO_SIZE)
 
-        for index, image_path in enumerate(image_paths):
-            start_time = index * image_duration
-            clip_duration = (
-                duration - start_time
-                if index == len(image_paths) - 1
-                else image_duration
-            )
-            image_clips.append(
-                _create_cover_image_clip(image_path, clip_duration, start_time)
-            )
+    clips = []
+    image_duration = duration / len(image_paths)
 
-    clips = [*image_clips, *_create_shape_clips(template_config, duration)]
+    for index, image_path in enumerate(image_paths):
+        start_time = index * image_duration
+        clip_duration = (
+            duration - start_time
+            if index == len(image_paths) - 1
+            else image_duration
+        )
+        clips.append(_create_cover_image_clip(image_path, clip_duration, start_time))
+
+    clips.extend(_create_shape_clips(template_config, duration))
 
     return CompositeVideoClip(clips, size=VIDEO_SIZE)
 
@@ -369,6 +369,7 @@ def build_video(
         captions_path: Optional SRT captions file to burn into the video.
         template: Built-in visual template name.
         image_paths: Optional image paths to use as the main visual layer.
+        image_paths: Optional local image paths to use as the main visual layer.
 
     Returns:
         The saved MP4 file path as a string.
