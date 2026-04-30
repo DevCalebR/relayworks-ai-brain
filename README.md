@@ -1,8 +1,8 @@
 # RelayWorks AI Content Brain
 
-RelayWorks AI Content Brain is a local Python pipeline for generating short-form video assets. It can create a script with OpenAI, generate SRT captions, create YouTube-ready metadata JSON, produce an ElevenLabs voiceover, build a vertical MP4 with optional burned-in captions, create local test audio, organize successful run outputs, validate organized run folders for future upload work, and log successful pipeline runs to `memory/logs.json`.
+RelayWorks AI Content Brain is a local Python pipeline for generating short-form video assets. It can create a script with OpenAI, generate SRT captions, create YouTube-ready metadata JSON, produce an ElevenLabs voiceover, build a simple vertical MP4 with optional burned-in captions, use local or OpenAI-generated images as the main video visual layer, create local test audio, organize successful run outputs, validate upload readiness, and log successful runs to `memory/logs.json`.
 
-The project is intentionally local-first. It prepares assets for a future YouTube workflow, but it does not upload, authenticate with YouTube, schedule posts, research topics, add stock footage, or analyze performance yet.
+The project is intentionally local-first. It prepares assets for a future YouTube workflow, but it does not upload, schedule, research topics, add stock footage, download internet images, or analyze performance yet.
 
 ## Current Pipeline Status
 
@@ -13,13 +13,18 @@ The pipeline currently supports these CLI modes:
 - `metadata`: generates a script and YouTube-ready metadata JSON.
 - `voiceover`: generates a script and ElevenLabs audio.
 - `test-audio`: creates a local test MP3 without API calls.
-- `video`: builds an MP4 from an existing audio file, optionally with burned-in captions when `--captions-path` is provided.
-- `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and logs the run.
-- `upload-check`: validates an organized run folder for future YouTube upload readiness.
+- `video`: builds an MP4 from an existing audio file, optionally using burned-in captions and local image inputs.
+- `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and optional OpenAI-generated scene images.
+- `upload-check`: validates an organized run folder before a future upload step.
 
 The pipeline also supports:
 
+- `--template`: selects a built-in local video template.
 - `--captions-path`: supplies an existing `.srt` file for `video` mode so captions can be burned into the generated MP4.
+- `--images-dir`: uses supported local images from a folder.
+- `--image-paths`: uses explicit local image file paths.
+- `--use-ai-images`: generates OpenAI scene images during `full` mode.
+- `--image-count`: controls how many AI scene images to request.
 - `--organize`: copies successful run outputs into a timestamped folder under `outputs/runs/`.
 - `--template`: selects the local video style template.
 - `--caption-offset`: adjusts generated caption timing in `full` mode.
@@ -58,7 +63,7 @@ ELEVENLABS_VOICE_ID=your_voice_id_here
 YOUTUBE_API_KEY=your_key_here
 ```
 
-- `OPENAI_API_KEY`: required for modes that generate scripts: `script`, `captions`, `metadata`, `voiceover`, and `full`.
+- `OPENAI_API_KEY`: required for modes that generate scripts and for OpenAI-generated scene images: `script`, `captions`, `metadata`, `voiceover`, `full`, and `full --use-ai-images`.
 - `ELEVENLABS_API_KEY`: required for modes that generate ElevenLabs audio: `voiceover` and `full`.
 - `ELEVENLABS_VOICE_ID`: required for predictable ElevenLabs voice generation. It must match a valid voice available to the configured ElevenLabs account.
 - `YOUTUBE_API_KEY`: placeholder for future use. The current pipeline does not call YouTube.
@@ -109,31 +114,49 @@ Build a vertical MP4 from an existing audio file and burn in captions from an ex
 python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt
 ```
 
+Build a captioned video with explicit local image files:
+
+```bash
+python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
+```
+
+Build a captioned video with supported local images from a folder:
+
+```bash
+python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --images-dir /path/to/images
+```
+
 Run the full local pipeline:
 
 ```bash
 python main.py --mode full
 ```
 
-Run the full local pipeline with the `ai` video template:
-
-```bash
-python main.py --mode full --template ai
-```
-
-Run the full local pipeline and organize successful outputs into a timestamped run folder:
+Run the full local pipeline with the AI template and organized outputs:
 
 ```bash
 python main.py --mode full --template ai --organize
 ```
 
-Run the full local pipeline with a caption timing offset:
+Run the full local pipeline with OpenAI-generated scene images:
 
 ```bash
-python main.py --mode full --template ai --organize --caption-offset 0.5
+python main.py --mode full --template ai --organize --use-ai-images
 ```
 
-Validate an organized run folder for future YouTube upload readiness:
+Request fewer AI scene images for cheaper testing:
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images --image-count 3
+```
+
+Request more AI scene images for better visual variety:
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images --image-count 5
+```
+
+Check whether an organized run folder has the files expected for future upload:
 
 ```bash
 python main.py --mode upload-check --run-folder outputs/runs/<run-folder-name>
@@ -196,6 +219,79 @@ The metadata is local only for now. It prepares the project for future YouTube u
 
 Generated metadata JSON files are ignored by Git and should not be committed. The placeholder file `outputs/metadata/.gitkeep` should stay tracked so the folder exists in fresh clones.
 
+## Local Image Support
+
+Local image inputs let `video` mode use existing images as the main visual layer behind captions and template overlays.
+
+Use `--image-paths` when you want exact control over the files:
+
+```bash
+python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
+```
+
+Use `--images-dir` when you want the pipeline to collect supported image files from a folder:
+
+```bash
+python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --images-dir /path/to/images
+```
+
+Supported local image extensions are:
+
+- `.jpg`
+- `.jpeg`
+- `.png`
+- `.webp`
+
+Local images are not uploaded anywhere. They are used locally by the video builder as visual backgrounds.
+
+## OpenAI-Generated Image Support
+
+`full` mode can generate scene images with OpenAI when `--use-ai-images` is provided. AI-generated images are used as the main visual layer behind captions and template overlays.
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images
+```
+
+`--image-count` controls how many AI scene images to request:
+
+```bash
+python main.py --mode full --template ai --organize --use-ai-images --image-count 3
+python main.py --mode full --template ai --organize --use-ai-images --image-count 5
+```
+
+- AI image generation uses `OPENAI_API_KEY`.
+- AI image generation may use extra API credits.
+- Use `--image-count 3` for cheaper testing.
+- Use `--image-count 5` for better visual variety.
+- AI images are generated locally into `outputs/images/`.
+- No stock media search is built yet.
+- No internet image downloads are built yet.
+
+## Video Templates
+
+The `--template` option selects a built-in local video template. Templates control the visual treatment used by `tools/video_builder.py`, including the look of the generated vertical video and overlays.
+
+Example:
+
+```bash
+python main.py --mode full --template ai --organize
+```
+
+Image inputs and AI-generated images work as the main visual layer behind the selected template's captions and overlays.
+
+## Burned-In Captions
+
+`tools/captions.py` saves generated SRT captions under `outputs/captions/`.
+
+`tools/video_builder.py` can burn captions into generated MP4 videos when a valid SRT file is provided with `--captions-path`.
+
+Caption burn-in is available in:
+
+- `video` mode when `--captions-path` points to an existing `.srt` file.
+- `full` mode as part of the generated script, caption, metadata, audio, and video flow.
+
+If `--captions-path` is not provided in `video` mode, the video is built from the audio file without burned-in captions.
+
 ## Run-Folder Organization
 
 The optional `--organize` flag copies successful run outputs into a timestamped folder under:
@@ -215,6 +311,7 @@ A complete organized `full` run should contain:
 - `metadata.json`
 - `audio.mp3`
 - `video.mp4`
+- `images/` if image copying is implemented
 
 Generated run folders are ignored by Git and should not be committed. The placeholder file `outputs/runs/.gitkeep` should stay tracked so the folder exists in fresh clones.
 
@@ -261,10 +358,23 @@ Generated outputs are written under `outputs/` and `memory/`:
 - `outputs/metadata/`: generated `.json` metadata files from `tools/metadata.py`.
 - `outputs/audio/`: generated ElevenLabs `.mp3` audio from `tools/voiceover.py` and local test `.mp3` files from `tools/test_audio.py`.
 - `outputs/videos/`: generated `.mp4` videos from `tools/video_builder.py`.
+- `outputs/images/`: generated OpenAI scene images from `tools/image_generator.py`.
 - `outputs/runs/`: timestamped organized copies of successful run outputs from `tools/run_folder.py`.
 - `memory/logs.json`: successful run log maintained by `tools/logger.py`.
 
-Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, metadata JSON files, and generated run folders are ignored by Git and should not be committed. Keep `outputs/metadata/.gitkeep` and `outputs/runs/.gitkeep` tracked.
+`outputs/images/` stores generated AI scene images. Generated image files should not be committed. The placeholder file `outputs/images/.gitkeep` should stay tracked if present so the folder exists in fresh clones.
+
+Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, and generated run folders are ignored by Git and should not be committed.
+
+## Upload Readiness Checks
+
+`upload-check` validates an organized run folder before future YouTube upload work:
+
+```bash
+python main.py --mode upload-check --run-folder outputs/runs/<run-folder-name>
+```
+
+This is a local readiness check only. It does not upload to YouTube, authenticate with YouTube, or schedule publishing.
 
 ## Logging Behavior
 
@@ -303,23 +413,25 @@ Failed runs are not logged. `upload-check` is validation-only and should not add
 
 If `script`, `captions`, `metadata`, `voiceover`, or `full` fails with an OpenAI API error, confirm `OPENAI_API_KEY` is set in `.env`.
 
+If `full --use-ai-images` fails with an OpenAI API error, confirm `OPENAI_API_KEY` is set in `.env` and the account has access to image generation.
+
 If `voiceover` or `full` fails with an ElevenLabs API error, confirm `ELEVENLABS_API_KEY` is set in `.env`.
 
 If ElevenLabs audio generation fails because the voice cannot be found or used, confirm `ELEVENLABS_VOICE_ID` is set and matches a valid voice available to the configured ElevenLabs account.
+
+If `--image-count` fails validation, use a value greater than `0`. Use `3` for cheaper testing and `5` for better visual variety.
+
+If local image inputs fail, confirm each `--image-paths` value points to an existing supported file: `.jpg`, `.jpeg`, `.png`, or `.webp`.
+
+If `--images-dir` produces no images, confirm the folder exists and contains at least one supported image file.
 
 If `video` mode fails with a missing audio path, provide `--audio-path` pointing to an existing `.mp3` file.
 
 If caption burn-in fails, confirm `--captions-path` points to an existing valid `.srt` file.
 
-If generated captions are early or late in `full` mode, adjust timing with `--caption-offset`, for example `--caption-offset 0.5`.
+If `upload-check` fails immediately, confirm `--run-folder` points to an existing organized run folder under `outputs/runs/`.
 
-If `upload-check` fails before printing validation JSON, confirm `--run-folder` is provided.
-
-If `upload-check` returns `ready: false`, check whether `video.mp4` or `metadata.json` is missing, empty, unreadable, or invalid.
-
-If generated metadata JSON files do not appear in `git status`, that is expected. Files under `outputs/metadata/*.json` are ignored by Git.
-
-If generated files do not appear in `git status`, that is expected. Generated outputs and generated run folders are ignored by Git.
+If generated files do not appear in `git status`, that is expected. Generated outputs, generated image files, and generated run folders are ignored by Git.
 
 If `memory/logs.json` errors during logging, make sure the file contains valid JSON and that the top-level value is an array.
 
@@ -334,7 +446,8 @@ python main.py --mode video --audio-path outputs/audio/how-people-are-making-mon
 
 - No actual YouTube upload yet.
 - No YouTube OAuth yet.
-- No stock footage yet.
+- No stock footage search yet.
+- No internet image download pipeline yet.
 - No scheduling yet.
 - No topic research yet.
 - No analytics yet.
@@ -344,6 +457,10 @@ python main.py --mode video --audio-path outputs/audio/how-people-are-making-mon
 
 These are future options only and are not implemented yet:
 
+- Test and tune AI image prompt quality.
+- Document recommended templates/settings.
+- Add YouTube OAuth and upload.
+- Add stock footage or background media search.
 - Add YouTube OAuth and upload.
 - Add stock footage or background media.
 - Add topic research.
