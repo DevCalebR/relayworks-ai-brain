@@ -1,6 +1,6 @@
 # RelayWorks AI Content Brain
 
-RelayWorks AI Content Brain is a local Python pipeline for producing short-form video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
+RelayWorks AI Content Brain is a local Python pipeline for producing short episode-style vertical video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
 
 The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, external trend data, analytics, and automatic publishing are not built yet.
 
@@ -23,6 +23,7 @@ The pipeline currently supports these CLI modes:
 Common options:
 
 - `--template`: selects the local video style template.
+- `--target-duration-seconds`: controls the target spoken script duration for generated scripts. Default: `150`.
 - `--caption-offset`: adjusts generated caption timing in `full` mode.
 - `--images-dir`: uses supported local images from a folder.
 - `--image-paths`: uses explicit local image file paths.
@@ -46,6 +47,8 @@ The strangest disappearance in history
 ```
 
 You can override it with `--topic "your topic here"` for modes that generate topic-based assets.
+
+Script generation now defaults to a 2-3 minute weird history / mystery episode format, targeting about 150 seconds of narration or roughly 320-450 words.
 
 ## Local Setup On Mac
 
@@ -147,7 +150,7 @@ python main.py --mode video --audio-path outputs/audio/the-strangest-disappearan
 Generate a complete organized run with AI scene images:
 
 ```bash
-python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6
+python main.py --mode full --topic "The Lost Colony of Roanoke Episode 1: The Village That Vanished" --template ai --organize --use-ai-images --image-count 12 --generate-thumbnail --target-duration-seconds 150
 ```
 
 Generate a local thumbnail only:

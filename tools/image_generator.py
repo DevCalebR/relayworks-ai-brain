@@ -66,8 +66,8 @@ def split_script_into_image_scenes(text, image_count=5):
 
 def _build_image_prompt(topic, scene_text, template):
     return (
-        "Create a cinematic, moody, high-contrast YouTube Shorts background image "
-        "for a weird history, mystery, or scary factual story.\n"
+        "Create a cinematic, moody, high-contrast vertical video background image "
+        "for a weird history, mystery, or scary factual episode.\n"
         f"Topic: {topic}\n"
         f"Scene: {scene_text}\n"
         f"Visual direction: historically inspired when relevant, mysterious, atmospheric, "
