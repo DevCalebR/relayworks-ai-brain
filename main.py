@@ -14,6 +14,7 @@ from tools.run_folder import organize_run_outputs
 from tools.test_audio import create_test_audio
 from tools.text_cleaner import clean_narration_text, ensure_call_to_action
 from tools.thumbnail_generator import generate_thumbnail
+from tools.topic_research import research_topics, save_topic_research
 from tools.upload_check import validate_upload_package
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
@@ -43,6 +44,7 @@ def parse_args():
             "upload-check",
             "upload",
             "thumbnail",
+            "topic-research",
         ],
         default="full",
         help="Pipeline mode to run.",
@@ -135,6 +137,20 @@ def parse_args():
         action="store_true",
         help="Upload run-folder thumbnail.png after a successful YouTube video upload.",
     )
+    parser.add_argument(
+        "--niche",
+        help="Niche to research when --mode topic-research.",
+    )
+    parser.add_argument(
+        "--audience",
+        help="Optional audience to target when --mode topic-research.",
+    )
+    parser.add_argument(
+        "--topic-count",
+        type=int,
+        default=10,
+        help="Number of topic ideas to generate when --mode topic-research.",
+    )
     return parser.parse_args()
 
 
@@ -164,6 +180,33 @@ def get_audio_duration_seconds(audio_path):
         audio_clip.close()
 
 
+def print_topic_research(topics, saved_path):
+    print("\nTopic ideas:")
+    for topic in topics:
+        print(
+            f"{topic['rank']}. {topic['topic']} "
+            f"(viral {topic['viral_potential_score']}/10, "
+            f"difficulty {topic['production_difficulty_score']}/10, "
+            f"combined {topic['combined_score']})"
+        )
+        print(f"   Hook: {topic['hook']}")
+        print(f"   Template: {topic['suggested_template']}")
+        print(f"   Title: {topic['suggested_title']}")
+
+    print("\nSaved topic research path:")
+    print(saved_path)
+
+    if topics:
+        top_topic = topics[0]
+        print("\nExample full-mode command from the top topic:")
+        print(
+            "python main.py --mode full "
+            f"--topic {json.dumps(top_topic['topic'])} "
+            f"--template {top_topic['suggested_template']} "
+            "--organize --use-ai-images --image-count 3 --generate-thumbnail"
+        )
+
+
 def main():
     args = parse_args()
     topic = args.topic
@@ -177,6 +220,21 @@ def main():
 
     if args.seconds_per_caption <= 0:
         raise ValueError("--seconds-per-caption must be greater than 0")
+
+    if args.mode == "topic-research":
+        if not args.niche:
+            raise ValueError("--niche is required when --mode topic-research")
+        if args.topic_count <= 0:
+            raise ValueError("--topic-count must be greater than 0")
+
+        topics = research_topics(
+            niche=args.niche,
+            audience=args.audience,
+            count=args.topic_count,
+        )
+        saved_path = save_topic_research(args.niche, topics)
+        print_topic_research(topics, saved_path)
+        return
 
     if args.mode == "upload-check":
         if not args.run_folder:

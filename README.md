@@ -2,7 +2,7 @@
 
 RelayWorks AI Content Brain is a local Python pipeline for producing short-form video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
 
-The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, topic research, analytics, and automatic publishing are not built yet.
+The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, external trend data, analytics, and automatic publishing are not built yet.
 
 ## Current Pipeline Status
 
@@ -16,6 +16,7 @@ The pipeline currently supports these CLI modes:
 - `video`: builds an MP4 from an existing audio file, optionally using burned-in captions and local image inputs.
 - `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and optional OpenAI-generated scene images.
 - `thumbnail`: generates a local 1280x720 thumbnail image without generating a video or calling YouTube.
+- `topic-research`: generates and ranks local OpenAI-based YouTube Shorts topic ideas.
 - `upload-check`: validates an organized run folder before upload.
 - `upload`: uploads `video.mp4` from a validated organized run folder using `metadata.json`.
 
@@ -34,6 +35,9 @@ Common options:
 - `--run-folder`: points `upload-check` and `upload` modes to an organized run folder under `outputs/runs/`.
 - `--privacy-status`: controls YouTube visibility for `upload` mode. Use `private` by default.
 - `--upload-thumbnail`: optionally uploads `thumbnail.png` from the run folder after a successful video upload.
+- `--niche`: sets the niche to research in `topic-research` mode.
+- `--audience`: optionally sets the target audience in `topic-research` mode.
+- `--topic-count`: controls how many topic ideas to generate in `topic-research` mode.
 
 The default topic is:
 
@@ -69,7 +73,7 @@ YOUTUBE_TOKEN_FILE=youtube_token.json
 YOUTUBE_PRIVACY_STATUS=private
 ```
 
-- `OPENAI_API_KEY`: required for modes that generate scripts and for OpenAI-generated scene images.
+- `OPENAI_API_KEY`: required for modes that generate scripts, topic research, and OpenAI-generated scene images.
 - `ELEVENLABS_API_KEY`: required for modes that generate ElevenLabs audio.
 - `ELEVENLABS_VOICE_ID`: required for predictable ElevenLabs voice generation.
 - `YOUTUBE_API_KEY`: placeholder for possible future non-upload use. It is not used for uploads.
@@ -163,6 +167,14 @@ Generate a complete organized run with a thumbnail:
 ```bash
 python main.py --mode full --template ai --organize --use-ai-images --image-count 3 --generate-thumbnail
 ```
+
+Research topic ideas locally with OpenAI:
+
+```bash
+python main.py --mode topic-research --niche "AI side hustles" --audience "beginners" --topic-count 10
+```
+
+Topic research uses OpenAI only. It does not call YouTube APIs, scrape the web, use YouTube trend data, or use analytics feedback yet. Generated topic research JSON files are saved under `outputs/topics/` and should not be committed.
 
 Validate an organized run folder before upload:
 
@@ -393,6 +405,7 @@ Generated outputs are written under `outputs/` and `memory/`:
 - `outputs/videos/`: generated `.mp4` videos.
 - `outputs/images/`: generated OpenAI scene images.
 - `outputs/thumbnails/`: generated thumbnail images.
+- `outputs/topics/`: generated OpenAI topic research `.json` files.
 - `outputs/runs/`: timestamped organized copies of successful run outputs.
 - `memory/logs.json`: successful generation run log.
 
@@ -406,7 +419,9 @@ A complete organized `full` run can contain:
 - `thumbnail.png`
 - `images/` if image copying is implemented
 
-Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, and generated run folders are ignored by Git and should not be committed.
+Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, generated topic research files, and generated run folders are ignored by Git and should not be committed.
+
+External trend data, YouTube search, analytics, performance feedback, scheduling, and automatic batch generation are future milestones.
 
 ## Logging Behavior
 
