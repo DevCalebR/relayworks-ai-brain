@@ -21,6 +21,9 @@ from tools.youtube_api import upload_video_from_run_folder
 
 
 DEFAULT_TOPIC = "How people are making money with AI in 2026"
+DEFAULT_CAPTION_OFFSET = 1.2
+DEFAULT_WORDS_PER_CAPTION = 8
+DEFAULT_SECONDS_PER_CAPTION = 2.5
 
 
 def parse_args():
@@ -79,8 +82,20 @@ def parse_args():
     parser.add_argument(
         "--caption-offset",
         type=float,
-        default=0.5,
+        default=DEFAULT_CAPTION_OFFSET,
         help="Caption start offset in seconds used when full mode has audio duration.",
+    )
+    parser.add_argument(
+        "--words-per-caption",
+        type=int,
+        default=DEFAULT_WORDS_PER_CAPTION,
+        help="Number of words to include in each generated caption.",
+    )
+    parser.add_argument(
+        "--seconds-per-caption",
+        type=float,
+        default=DEFAULT_SECONDS_PER_CAPTION,
+        help="Caption duration in seconds when no audio duration is available.",
     )
     parser.add_argument(
         "--use-ai-images",
@@ -156,6 +171,12 @@ def main():
 
     if args.image_count <= 0:
         raise ValueError("--image-count must be greater than 0")
+
+    if args.words_per_caption <= 0:
+        raise ValueError("--words-per-caption must be greater than 0")
+
+    if args.seconds_per_caption <= 0:
+        raise ValueError("--seconds-per-caption must be greater than 0")
 
     if args.mode == "upload-check":
         if not args.run_folder:
@@ -260,8 +281,15 @@ def main():
         return
 
     if args.mode == "captions":
-        captions_path = save_srt_captions(narration_text, topic)
+        captions_path = save_srt_captions(
+            narration_text,
+            topic,
+            words_per_caption=args.words_per_caption,
+            seconds_per_caption=args.seconds_per_caption,
+        )
         outputs["captions"] = captions_path
+        outputs["words_per_caption"] = args.words_per_caption
+        outputs["seconds_per_caption"] = args.seconds_per_caption
 
         print("\nSaved captions path:")
         print(captions_path)
@@ -327,11 +355,15 @@ def main():
         captions_path = save_srt_captions(
             narration_text,
             topic,
+            words_per_caption=args.words_per_caption,
+            seconds_per_caption=args.seconds_per_caption,
             total_duration_seconds=audio_duration,
             start_offset_seconds=args.caption_offset,
         )
         outputs["captions"] = captions_path
         outputs["caption_offset"] = args.caption_offset
+        outputs["words_per_caption"] = args.words_per_caption
+        outputs["seconds_per_caption"] = args.seconds_per_caption
 
         print("\nSaved captions path:")
         print(captions_path)
