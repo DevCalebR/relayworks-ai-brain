@@ -22,6 +22,7 @@ from tools.youtube_api import upload_video_from_run_folder
 
 
 DEFAULT_TOPIC = "The strangest disappearance in history"
+DEFAULT_TARGET_DURATION_SECONDS = 150
 DEFAULT_CAPTION_OFFSET = 1.2
 DEFAULT_WORDS_PER_CAPTION = 8
 DEFAULT_SECONDS_PER_CAPTION = 2.5
@@ -53,6 +54,12 @@ def parse_args():
         "--topic",
         default=DEFAULT_TOPIC,
         help="Topic to use for script generation or video title.",
+    )
+    parser.add_argument(
+        "--target-duration-seconds",
+        type=int,
+        default=DEFAULT_TARGET_DURATION_SECONDS,
+        help="Target spoken script duration in seconds for script and full modes.",
     )
     parser.add_argument(
         "--audio-path",
@@ -221,6 +228,9 @@ def main():
     if args.seconds_per_caption <= 0:
         raise ValueError("--seconds-per-caption must be greater than 0")
 
+    if args.target_duration_seconds <= 0:
+        raise ValueError("--target-duration-seconds must be greater than 0")
+
     if args.mode == "topic-research":
         if not args.niche:
             raise ValueError("--niche is required when --mode topic-research")
@@ -310,7 +320,10 @@ def main():
         log_success(topic, args.mode, outputs, args.organize)
         return
 
-    script = generate_script(topic)
+    script = generate_script(
+        topic,
+        target_duration_seconds=args.target_duration_seconds,
+    )
 
     narration_text = ensure_call_to_action(clean_narration_text(script))
 
