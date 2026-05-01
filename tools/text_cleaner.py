@@ -35,12 +35,29 @@ _EMOJI_PATTERN = re.compile(
 )
 
 _CTA_PATTERN = re.compile(
-    r"\b(?:subscribe|like\s+this\s+video|follow|comment\s+below)\b",
+    r"\b(?:"
+    r"subscribe|"
+    r"(?:please\s+)?like\s+(?:this\s+video|and\s+subscribe)|"
+    r"please\s+like|"
+    r"follow|"
+    r"comments?|"
+    r"comment\s+below|"
+    r"dive\s+into\s+the\s+comments|"
+    r"share\s+your\s+thoughts|"
+    r"for\s+more\s+stories|"
+    r"for\s+more\s+mysteries|"
+    r"for\s+more\s+strange\s+history|"
+    r"if\s+you\s+want\s+more|"
+    r"want\s+more\s+stories|"
+    r"hit\s+subscribe|"
+    r"like\s+and\s+subscribe|"
+    r"subscribe\s+for\s+more"
+    r")\b",
     flags=re.IGNORECASE,
 )
 
 _DEFAULT_CTA = (
-    "If this helped, like this video and subscribe for more AI business ideas."
+    "If you want more strange stories like this, like this video and subscribe."
 )
 
 
