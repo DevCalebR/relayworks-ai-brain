@@ -8,6 +8,7 @@ VIDEO_OUTPUT_DIR = Path("outputs/videos")
 
 VIDEO_SIZE = (1080, 1920)
 VIDEO_FPS = 24
+TITLE_DISPLAY_SECONDS = 4
 VALID_TEMPLATES = ("default", "bold", "minimal", "ai")
 
 
@@ -273,6 +274,8 @@ def _create_image_background_clip(image_paths, template_config, duration):
 
 
 def _create_title_clip(title, template_config, duration):
+    title_duration = min(TITLE_DISPLAY_SECONDS, duration)
+
     title_clip = TextClip(
         text=title,
         font_size=template_config["title_font_size"],
@@ -282,7 +285,7 @@ def _create_title_clip(title, template_config, duration):
         method="caption",
         size=(900, None),
         text_align="center",
-        duration=duration,
+        duration=title_duration,
     ).with_position(("center", template_config["title_y"]))
 
     subtitle_clip = TextClip(
@@ -292,7 +295,7 @@ def _create_title_clip(title, template_config, duration):
         method="caption",
         size=(900, None),
         text_align="center",
-        duration=duration,
+        duration=title_duration,
     ).with_position(("center", template_config["subtitle_y"]))
 
     return [title_clip, subtitle_clip]
