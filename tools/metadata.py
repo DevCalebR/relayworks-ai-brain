@@ -5,8 +5,23 @@ from pathlib import Path
 
 METADATA_OUTPUT_DIR = Path("outputs/metadata")
 GENERATED_FROM = "relayworks-ai-brain"
-DEFAULT_HASHTAGS = ["#shorts", "#ai", "#makemoney"]
-DEFAULT_TAGS = ["ai", "make money", "shorts", "youtube shorts"]
+DEFAULT_HASHTAGS = [
+    "#shorts",
+    "#history",
+    "#mystery",
+    "#weirdhistory",
+    "#darkhistory",
+    "#unsolved",
+]
+DEFAULT_TAGS = [
+    "weird history",
+    "mystery",
+    "dark history",
+    "unsolved mystery",
+    "eerie true stories",
+    "shorts",
+    "youtube shorts",
+]
 
 
 def _safe_filename(name):
@@ -49,9 +64,6 @@ def _build_tags(topic, script):
         if keyword not in tags:
             tags.append(keyword)
 
-    if "ai" in str(script).lower() and "artificial intelligence" not in tags:
-        tags.append("artificial intelligence")
-
     return tags
 
 
@@ -75,7 +87,7 @@ def save_video_metadata(topic, script, output_name):
     metadata = {
         "title": clean_topic,
         "description": (
-            f"A quick short-form video about {clean_topic}. "
+            f"A quick weird-history and mystery short about {clean_topic}. "
             "Generated locally with RelayWorks AI Content Brain."
         ),
         "tags": _build_tags(clean_topic, script),

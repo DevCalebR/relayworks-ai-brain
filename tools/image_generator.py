@@ -66,14 +66,16 @@ def split_script_into_image_scenes(text, image_count=5):
 
 def _build_image_prompt(topic, scene_text, template):
     return (
-        "Create a clean, modern, high-contrast YouTube Shorts background image.\n"
+        "Create a cinematic, moody, high-contrast YouTube Shorts background image "
+        "for a weird history, mystery, or scary factual story.\n"
         f"Topic: {topic}\n"
         f"Scene: {scene_text}\n"
-        f"Visual direction: cinematic business-tech editorial style, template mood {template}, "
-        "engaging but not cluttered, strong depth, polished lighting, vertical-friendly "
-        "composition that crops well to 9:16.\n"
+        f"Visual direction: historically inspired when relevant, mysterious, atmospheric, "
+        f"template mood {template}, engaging but not cluttered, strong depth, dramatic "
+        "lighting, vertical-friendly composition that crops well to 9:16.\n"
         "Constraints: no text, no subtitles, no captions, no logos, no watermark, "
-        "no UI labels, no typography in the image."
+        "no UI labels, no typography in the image, no graphic gore, no real person "
+        "depicted as a specific historical figure unless the scene is generic."
     )
 
 
