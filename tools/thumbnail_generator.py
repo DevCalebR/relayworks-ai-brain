@@ -57,7 +57,7 @@ def _cover_resize(image, size=THUMBNAIL_SIZE):
 def _clean_title(topic):
     title = re.sub(r"\s+", " ", str(topic)).strip()
     title = re.sub(r"[#*_`]+", "", title)
-    return title[:90] or "RelayWorks AI"
+    return title[:90] or "UNSOLVED"
 
 
 def _wrap_text(text, font, max_width):
@@ -111,8 +111,8 @@ def _add_title_overlay(image, topic, template="ai"):
     text_color = (255, 255, 255)
     shadow_color = (0, 0, 0)
 
-    draw.rounded_rectangle((64, 54, 360, 110), radius=18, fill=(12, 18, 24))
-    draw.text((84, 64), "RELAYWORKS AI", font=brand_font, fill=accent_color)
+    draw.rounded_rectangle((64, 54, 350, 110), radius=18, fill=(12, 18, 24))
+    draw.text((84, 64), "DARK HISTORY", font=brand_font, fill=accent_color)
 
     y = height - (len(title_lines) * (font_size + 10)) - 64
 
@@ -127,19 +127,19 @@ def _add_title_overlay(image, topic, template="ai"):
 
 def _create_local_background():
     width, height = THUMBNAIL_SIZE
-    image = Image.new("RGB", THUMBNAIL_SIZE, (12, 18, 24))
+    image = Image.new("RGB", THUMBNAIL_SIZE, (10, 12, 16))
     draw = ImageDraw.Draw(image)
 
     for x in range(width):
         ratio = x / width
         color = (
-            int(12 + ratio * 22),
-            int(18 + ratio * 38),
-            int(24 + ratio * 58),
+            int(10 + ratio * 34),
+            int(12 + ratio * 24),
+            int(16 + ratio * 42),
         )
         draw.line((x, 0, x, height), fill=color)
 
-    for index, color in enumerate([(70, 230, 210), (255, 210, 76), (86, 130, 255)]):
+    for index, color in enumerate([(196, 32, 58), (255, 210, 76), (72, 96, 126)]):
         x = 760 + index * 110
         y = 130 + index * 80
         draw.ellipse((x, y, x + 360, y + 360), fill=color)
@@ -147,7 +147,7 @@ def _create_local_background():
     image = image.filter(ImageFilter.GaussianBlur(radius=26))
     draw = ImageDraw.Draw(image)
     draw.rounded_rectangle((690, 150, 1160, 570), radius=28, outline=(255, 255, 255), width=4)
-    draw.line((740, 290, 1110, 290), fill=(70, 230, 210), width=10)
+    draw.line((740, 290, 1110, 290), fill=(196, 32, 58), width=10)
     draw.line((740, 370, 1040, 370), fill=(255, 210, 76), width=10)
     draw.line((740, 450, 1090, 450), fill=(255, 255, 255), width=10)
 
@@ -166,12 +166,15 @@ def _get_openai_client():
 def _generate_ai_background(topic, template):
     client = _get_openai_client()
     prompt = (
-        "Create a YouTube thumbnail background image for a short-form business video.\n"
+        "Create a YouTube thumbnail background image for a weird history, mystery, "
+        "or scary factual short-form video.\n"
         f"Topic: {topic}\n"
-        f"Style: high contrast, modern AI/business feel, template mood {template}, "
-        "bold composition, clean depth, premium lighting, thumbnail-friendly landscape.\n"
+        f"Style: mysterious, cinematic, high contrast, curiosity-driven, template mood {template}, "
+        "bold composition, clean depth, dramatic lighting, thumbnail-friendly landscape.\n"
         "Constraints: no small unreadable text, no subtitles, no watermark, no logos, "
-        "no typography, leave room for a large local title overlay."
+        "no typography, no graphic gore, leave room for a large local title overlay. "
+        "The final overlay text may be short and clickable, like VANISHED, NO ONE KNOWS WHY, "
+        "FORBIDDEN HISTORY, or THE LOST VILLAGE."
     )
     response = client.images.generate(
         model=DEFAULT_IMAGE_MODEL,

@@ -102,7 +102,10 @@ def research_topics(niche, audience=None, count=10):
             {
                 "role": "system",
                 "content": (
-                    "You research YouTube Shorts ideas using only your general knowledge. "
+                    "You research weird history, mystery, dark history, unsolved "
+                    "disappearance, and scary factual YouTube Shorts ideas using only "
+                    "your general knowledge. Ideas must be specific, curiosity-driven, "
+                    "and factual-sounding rather than generic categories. "
                     "Do not claim to use YouTube APIs, analytics, trend data, web search, "
                     "or scraped data. Return only valid JSON."
                 ),
@@ -110,9 +113,17 @@ def research_topics(niche, audience=None, count=10):
             {
                 "role": "user",
                 "content": (
-                    f"Generate {count} promising YouTube Shorts topic ideas.\n"
+                    f"Generate {count} promising weird-history or mystery YouTube Shorts topic ideas.\n"
                     f"Niche: {niche}\n"
                     f"Audience: {audience_text}\n\n"
+                    "Make each topic specific and curiosity-driven, like:\n"
+                    "- The village that vanished overnight\n"
+                    "- The king who died from laughing too hard\n"
+                    "- The unsolved disappearance inside a locked room\n"
+                    "- The ancient punishment people were terrified of\n"
+                    "- The island nobody was allowed to visit\n\n"
+                    "Avoid generic ideas like Interesting history facts, Scary mysteries, "
+                    "or Dark history stories.\n\n"
                     "Return a JSON object with a topics array. Each topic must include:\n"
                     "- topic\n"
                     "- hook\n"
@@ -125,7 +136,8 @@ def research_topics(niche, audience=None, count=10):
                     "- suggested_thumbnail_angle\n"
                     "- suggested_title\n"
                     "- tags, array of short strings\n\n"
-                    "Prefer suggested_template ai for AI, business, or tech topics when appropriate."
+                    "Prefer suggested_template bold or ai for eerie, mystery, or dark history "
+                    "topics when appropriate."
                 ),
             },
         ],

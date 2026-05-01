@@ -42,7 +42,7 @@ Common options:
 The default topic is:
 
 ```text
-How people are making money with AI in 2026
+The strangest disappearance in history
 ```
 
 You can override it with `--topic "your topic here"` for modes that generate topic-based assets.
@@ -135,43 +135,43 @@ python main.py --mode test-audio
 Build a video from existing audio:
 
 ```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3
+python main.py --mode video --audio-path outputs/audio/the-strangest-disappearance-in-history-test.mp3
 ```
 
 Build a captioned video:
 
 ```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt
+python main.py --mode video --audio-path outputs/audio/the-strangest-disappearance-in-history-test.mp3 --captions-path outputs/captions/the-strangest-disappearance-in-history.srt
 ```
 
 Generate a complete organized run with AI scene images:
 
 ```bash
-python main.py --mode full --template ai --organize --use-ai-images --image-count 3
+python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6
 ```
 
 Generate a local thumbnail only:
 
 ```bash
-python main.py --mode thumbnail --topic "How people are making money with AI in 2026"
+python main.py --mode thumbnail --topic "The strangest disappearance in history"
 ```
 
 Generate a local thumbnail from an existing image:
 
 ```bash
-python main.py --mode thumbnail --topic "How people are making money with AI in 2026" --thumbnail-source /path/to/image.png
+python main.py --mode thumbnail --topic "The strangest disappearance in history" --thumbnail-source /path/to/image.png
 ```
 
 Generate a complete organized run with a thumbnail:
 
 ```bash
-python main.py --mode full --template ai --organize --use-ai-images --image-count 3 --generate-thumbnail
+python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6 --generate-thumbnail
 ```
 
 Research topic ideas locally with OpenAI:
 
 ```bash
-python main.py --mode topic-research --niche "AI side hustles" --audience "beginners" --topic-count 10
+python main.py --mode topic-research --niche "weird history mysteries" --audience "curious history and mystery fans" --topic-count 10
 ```
 
 Topic research uses OpenAI only. It does not call YouTube APIs, scrape the web, use YouTube trend data, or use analytics feedback yet. Generated topic research JSON files are saved under `outputs/topics/` and should not be committed.
@@ -197,7 +197,7 @@ python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --priva
 Use a custom topic with any mode that accepts topic input:
 
 ```bash
-python main.py --mode script --topic "How small businesses use AI assistants"
+python main.py --mode script --topic "The island nobody was allowed to visit"
 ```
 
 ## Successful Manual Upload Workflow
@@ -205,7 +205,7 @@ python main.py --mode script --topic "How small businesses use AI assistants"
 Generate a complete organized run:
 
 ```bash
-python main.py --mode full --template ai --organize --use-ai-images --image-count 3
+python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6
 ```
 
 Validate the newest run folder:
@@ -342,13 +342,13 @@ Local images and OpenAI-generated images are used as the main visual layer behin
 Use explicit local image paths:
 
 ```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
+python main.py --mode video --audio-path outputs/audio/the-strangest-disappearance-in-history-test.mp3 --captions-path outputs/captions/the-strangest-disappearance-in-history.srt --template ai --image-paths /path/to/image1.png /path/to/image2.jpg
 ```
 
 Use a local image folder:
 
 ```bash
-python main.py --mode video --audio-path outputs/audio/how-people-are-making-money-with-ai-in-2026-test.mp3 --captions-path outputs/captions/how-people-are-making-money-with-ai-in-2026.srt --template ai --images-dir /path/to/images
+python main.py --mode video --audio-path outputs/audio/the-strangest-disappearance-in-history-test.mp3 --captions-path outputs/captions/the-strangest-disappearance-in-history.srt --template ai --images-dir /path/to/images
 ```
 
 Supported local image extensions:
@@ -361,7 +361,7 @@ Supported local image extensions:
 Generate AI scene images in `full` mode:
 
 ```bash
-python main.py --mode full --template ai --organize --use-ai-images --image-count 3
+python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6
 ```
 
 AI image generation uses `OPENAI_API_KEY`, may use extra API credits, and writes generated images to `outputs/images/`.
@@ -371,25 +371,25 @@ AI image generation uses `OPENAI_API_KEY`, may use extra API credits, and writes
 `thumbnail` mode creates a local 1280x720 YouTube-ready thumbnail under `outputs/thumbnails/`.
 
 ```bash
-python main.py --mode thumbnail --topic "How people are making money with AI in 2026"
+python main.py --mode thumbnail --topic "The strangest disappearance in history"
 ```
 
 Use `--thumbnail-source` to crop and resize an existing image as the visual base, then add a readable title overlay from the topic:
 
 ```bash
-python main.py --mode thumbnail --topic "How people are making money with AI in 2026" --thumbnail-source /path/to/image.png
+python main.py --mode thumbnail --topic "The strangest disappearance in history" --thumbnail-source /path/to/image.png
 ```
 
 Use `--use-ai-thumbnail` to generate a thumbnail background with OpenAI, then add the local title overlay:
 
 ```bash
-python main.py --mode thumbnail --topic "How people are making money with AI in 2026" --use-ai-thumbnail
+python main.py --mode thumbnail --topic "The strangest disappearance in history" --use-ai-thumbnail
 ```
 
 Full mode only generates a thumbnail when `--generate-thumbnail` is provided:
 
 ```bash
-python main.py --mode full --template ai --organize --use-ai-images --image-count 3 --generate-thumbnail
+python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6 --generate-thumbnail
 ```
 
 When organized, generated thumbnails are copied into the run folder as `thumbnail.png`. Thumbnail generation is local only. To upload that file to YouTube after video upload, pass `--upload-thumbnail` in `upload` mode.
@@ -488,7 +488,7 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 - No automatic thumbnail upload by default.
 - No scheduling yet.
 - No stock footage search yet.
-- No topic research yet.
+- No external trend data or YouTube search yet.
 - No analytics yet.
 - No automatic performance feedback loop yet.
 
@@ -498,6 +498,6 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 - Add thumbnail review and management workflow.
 - Improve image prompt quality.
 - Add stock footage or background media search.
-- Add topic research.
+- Add external trend research once the local topic workflow is stable.
 - Add scheduling.
 - Add analytics and performance logging.

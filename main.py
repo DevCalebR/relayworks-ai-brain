@@ -21,7 +21,7 @@ from tools.video_builder import build_video
 from tools.youtube_api import upload_video_from_run_folder
 
 
-DEFAULT_TOPIC = "How people are making money with AI in 2026"
+DEFAULT_TOPIC = "The strangest disappearance in history"
 DEFAULT_CAPTION_OFFSET = 1.2
 DEFAULT_WORDS_PER_CAPTION = 8
 DEFAULT_SECONDS_PER_CAPTION = 2.5
