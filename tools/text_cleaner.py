@@ -8,6 +8,8 @@ _SPEAKER_LABEL_PATTERN = re.compile(
     r"\s*:\s*(?:[*_~`]+\s*)?"
 )
 
+_TOPIC_LABEL_PATTERN = re.compile(r"(?im)^\s*topic:\s*.*(?:\n|$)")
+
 _TIMESTAMP_DIRECTION_PATTERN = re.compile(
     r"[\[(]\s*(?:\d{1,2}:)?\d{1,2}:\d{2}\s*-\s*(?:\d{1,2}:)?\d{1,2}:\d{2}\s*[\])]"
 )
@@ -73,6 +75,7 @@ def clean_narration_text(text):
     Return narration-only text suitable for text-to-speech and captions.
     """
     cleaned_text = str(text or "")
+    cleaned_text = _TOPIC_LABEL_PATTERN.sub(" ", cleaned_text)
     cleaned_text = _TIMESTAMP_DIRECTION_PATTERN.sub(" ", cleaned_text)
     cleaned_text = _COMMON_DIRECTION_PATTERN.sub(" ", cleaned_text)
     cleaned_text = _BRACKETED_DIRECTION_PATTERN.sub(" ", cleaned_text)
