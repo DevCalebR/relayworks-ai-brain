@@ -1,6 +1,6 @@
 # RelayWorks AI Content Brain
 
-RelayWorks AI Content Brain is a local Python pipeline for producing short episode-style vertical video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
+RelayWorks AI Content Brain is a local Python pipeline for producing episode-style video assets and manually uploading validated runs to YouTube. It can generate scripts with OpenAI, create SRT captions, write YouTube-ready metadata JSON, generate ElevenLabs voiceover audio, build landscape or vertical MP4 videos with optional burned-in captions, generate local YouTube-ready thumbnails, use local or OpenAI-generated images as the video visual layer, organize run outputs, validate upload readiness, and upload a validated run folder through YouTube OAuth.
 
 The project is intentionally local-first. Generated assets stay on your machine under `outputs/`, OAuth credentials stay local, and uploads must be started manually from an organized run folder. Scheduling, stock footage search, external trend data, analytics, and automatic publishing are not built yet.
 
@@ -23,6 +23,7 @@ The pipeline currently supports these CLI modes:
 Common options:
 
 - `--template`: selects the local video style template.
+- `--video-format`: selects `landscape` for normal YouTube episode videos or `vertical` for Shorts-style videos. Default: `landscape`.
 - `--target-duration-seconds`: controls the target spoken script duration for generated scripts. Default: `150`.
 - `--caption-offset`: adjusts generated caption timing in `full` mode.
 - `--images-dir`: uses supported local images from a folder.
@@ -150,7 +151,7 @@ python main.py --mode video --audio-path outputs/audio/the-strangest-disappearan
 Generate a complete organized run with AI scene images:
 
 ```bash
-python main.py --mode full --topic "The Lost Colony of Roanoke Episode 1: The Village That Vanished" --template ai --organize --use-ai-images --image-count 12 --generate-thumbnail --target-duration-seconds 150
+python main.py --mode full --topic "The Lost Colony of Roanoke Episode 1: The Village That Vanished" --template ai --organize --use-ai-images --image-count 12 --generate-thumbnail --target-duration-seconds 150 --video-format landscape
 ```
 
 Generate a local thumbnail only:
@@ -268,6 +269,7 @@ Missing `thumbnail.png` creates a warning only. It does not make upload readines
 ## Manual YouTube Upload
 
 `upload` uploads `video.mp4` from a validated organized run folder using `metadata.json`.
+Generated metadata now uses richer episode-style descriptions, weird history / mystery tags, and niche hashtags by default.
 
 ```bash
 python main.py --mode upload --run-folder outputs/runs/<run-folder-name> --privacy-status private
@@ -312,17 +314,22 @@ Keep both OAuth files local:
 
 ## Video Templates
 
-`tools/video_builder.py` creates local vertical MP4 videos and supports these templates:
+`tools/video_builder.py` creates local MP4 videos and supports these templates:
 
 - `default`
 - `bold`
 - `minimal`
 - `ai`
 
+Video format options:
+
+- `--video-format landscape`: renders 1920x1080 and is recommended for 2-3 minute episode-style YouTube videos.
+- `--video-format vertical`: renders 1080x1920 and remains available for Shorts-style videos.
+
 Select a template with `--template`:
 
 ```bash
-python main.py --mode full --template ai
+python main.py --mode full --template ai --video-format landscape
 ```
 
 ## Captions
@@ -364,10 +371,10 @@ Supported local image extensions:
 Generate AI scene images in `full` mode:
 
 ```bash
-python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6
+python main.py --mode full --topic "The strangest disappearance in history" --template ai --organize --use-ai-images --image-count 6 --video-format landscape
 ```
 
-AI image generation uses `OPENAI_API_KEY`, may use extra API credits, and writes generated images to `outputs/images/`.
+AI image generation uses `OPENAI_API_KEY`, may use extra API credits, and writes generated images to `outputs/images/`. Scene image prompts are built from ordered narration beats so generated images better match the moment being narrated.
 
 ## Thumbnail Support
 

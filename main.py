@@ -84,6 +84,15 @@ def parse_args():
         help="Built-in local video template to use when generating videos.",
     )
     parser.add_argument(
+        "--video-format",
+        choices=["vertical", "landscape"],
+        default="landscape",
+        help=(
+            "Video aspect format to render. Use landscape for episode videos "
+            "or vertical for Shorts-style videos."
+        ),
+    )
+    parser.add_argument(
         "--organize",
         action="store_true",
         help="Copy generated outputs into a timestamped local run folder.",
@@ -306,10 +315,12 @@ def main():
             args.captions_path,
             template=args.template,
             image_paths=image_paths,
+            video_format=args.video_format,
         )
         outputs = {
             "video": video_path,
             "template": args.template,
+            "video_format": args.video_format,
             "images_used": bool(image_paths),
             "image_count": len(image_paths),
         }
@@ -382,6 +393,7 @@ def main():
                 topic,
                 image_count=args.image_count,
                 template=args.template,
+                video_format=args.video_format,
             )
             outputs["images"] = image_paths
             outputs["ai_images_used"] = True
@@ -446,9 +458,11 @@ def main():
         captions_path,
         template=args.template,
         image_paths=image_paths,
+        video_format=args.video_format,
     )
     outputs["video"] = video_path
     outputs["template"] = args.template
+    outputs["video_format"] = args.video_format
     outputs["images_used"] = bool(image_paths)
     outputs["image_count"] = len(image_paths)
 

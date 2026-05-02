@@ -6,7 +6,10 @@ from moviepy import AudioFileClip, ColorClip, CompositeVideoClip, ImageClip, Tex
 
 VIDEO_OUTPUT_DIR = Path("outputs/videos")
 
-VIDEO_SIZE = (1080, 1920)
+VIDEO_FORMATS = {
+    "vertical": (1080, 1920),
+    "landscape": (1920, 1080),
+}
 VIDEO_FPS = 24
 TITLE_DISPLAY_SECONDS = 4
 VALID_TEMPLATES = ("default", "bold", "minimal", "ai")
@@ -75,7 +78,49 @@ def _parse_srt_captions(captions_path):
     return captions
 
 
-def _get_template_config(template):
+def _get_video_size(video_format):
+    if video_format not in VIDEO_FORMATS:
+        valid_formats = ", ".join(VIDEO_FORMATS)
+        raise ValueError(
+            f"Unknown video format: {video_format}. Valid formats: {valid_formats}"
+        )
+
+    return VIDEO_FORMATS[video_format]
+
+
+def _scale_position(position, scale_x, scale_y):
+    if not isinstance(position, tuple):
+        return position
+
+    x, y = position
+
+    if isinstance(x, (int, float)):
+        x = int(x * scale_x)
+
+    if isinstance(y, (int, float)):
+        y = int(y * scale_y)
+
+    return (x, y)
+
+
+def _scale_shapes(shapes, scale_x, scale_y):
+    scaled_shapes = []
+
+    for shape in shapes:
+        width, height = shape["size"]
+        scaled_shape = dict(shape)
+        scaled_shape["size"] = (int(width * scale_x), int(height * scale_y))
+        scaled_shape["position"] = _scale_position(
+            shape["position"],
+            scale_x,
+            scale_y,
+        )
+        scaled_shapes.append(scaled_shape)
+
+    return scaled_shapes
+
+
+def _get_template_config(template, video_format="vertical"):
     configs = {
         "default": {
             "background_color": (12, 12, 18),
@@ -187,7 +232,28 @@ def _get_template_config(template):
             f"Unknown video template: {template}. Valid templates: {valid_templates}"
         )
 
-    return configs[template]
+    config = dict(configs[template])
+
+    if video_format == "vertical":
+        return config
+
+    _get_video_size(video_format)
+
+    scale_x = VIDEO_FORMATS["landscape"][0] / VIDEO_FORMATS["vertical"][0]
+    scale_y = VIDEO_FORMATS["landscape"][1] / VIDEO_FORMATS["vertical"][1]
+    font_scale = 0.78
+
+    config["title_font_size"] = int(config["title_font_size"] * font_scale)
+    config["subtitle_font_size"] = int(config["subtitle_font_size"] * font_scale)
+    config["caption_font_size"] = int(config["caption_font_size"] * font_scale)
+    config["title_y"] = int(270 if template != "bold" else 230)
+    config["subtitle_y"] = 865
+    config["caption_y"] = 780
+    config["caption_width"] = 1320
+    config["caption_padding"] = int(config["caption_padding"] * 0.78)
+    config["shapes"] = _scale_shapes(config["shapes"], scale_x, scale_y)
+
+    return config
 
 
 def _create_shape_clips(template_config, duration):
@@ -208,20 +274,20 @@ def _create_shape_clips(template_config, duration):
     return clips
 
 
-def _create_background_clip(template_config, duration):
+def _create_background_clip(template_config, duration, video_size):
     clips = [
         ColorClip(
-            size=VIDEO_SIZE,
+            size=video_size,
             color=template_config["background_color"],
             duration=duration,
         ),
         *_create_shape_clips(template_config, duration),
     ]
 
-    return CompositeVideoClip(clips, size=VIDEO_SIZE)
+    return CompositeVideoClip(clips, size=video_size)
 
 
-def _create_cover_image_clip(image_path, duration, start_time=0):
+def _create_cover_image_clip(image_path, duration, video_size, start_time=0):
     image_file = Path(image_path)
 
     if not image_file.exists():
@@ -229,7 +295,7 @@ def _create_cover_image_clip(image_path, duration, start_time=0):
 
     image_clip = ImageClip(str(image_file), duration=duration)
     image_width, image_height = image_clip.size
-    video_width, video_height = VIDEO_SIZE
+    video_width, video_height = video_size
     scale = max(video_width / image_width, video_height / image_height)
     resized_clip = image_clip.resized(
         new_size=(int(image_width * scale), int(image_height * scale))
@@ -247,14 +313,14 @@ def _create_cover_image_clip(image_path, duration, start_time=0):
     return cropped_clip
 
 
-def _create_image_background_clip(image_paths, template_config, duration):
+def _create_image_background_clip(image_paths, template_config, duration, video_size):
     if not image_paths:
         raise ValueError("image_paths must contain at least one image")
 
     if len(image_paths) == 1:
-        clips = [_create_cover_image_clip(image_paths[0], duration)]
+        clips = [_create_cover_image_clip(image_paths[0], duration, video_size)]
         clips.extend(_create_shape_clips(template_config, duration))
-        return CompositeVideoClip(clips, size=VIDEO_SIZE)
+        return CompositeVideoClip(clips, size=video_size)
 
     clips = []
     image_duration = duration / len(image_paths)
@@ -266,14 +332,21 @@ def _create_image_background_clip(image_paths, template_config, duration):
             if index == len(image_paths) - 1
             else image_duration
         )
-        clips.append(_create_cover_image_clip(image_path, clip_duration, start_time))
+        clips.append(
+            _create_cover_image_clip(
+                image_path,
+                clip_duration,
+                video_size,
+                start_time,
+            )
+        )
 
     clips.extend(_create_shape_clips(template_config, duration))
 
-    return CompositeVideoClip(clips, size=VIDEO_SIZE)
+    return CompositeVideoClip(clips, size=video_size)
 
 
-def _create_title_clip(title, template_config, duration):
+def _create_title_clip(title, template_config, duration, video_size):
     title_duration = min(TITLE_DISPLAY_SECONDS, duration)
 
     title_clip = TextClip(
@@ -283,7 +356,7 @@ def _create_title_clip(title, template_config, duration):
         stroke_color=template_config["title_stroke_color"],
         stroke_width=template_config["title_stroke_width"],
         method="caption",
-        size=(900, None),
+        size=(min(video_size[0] - 220, 1320), None),
         text_align="center",
         duration=title_duration,
     ).with_position(("center", template_config["title_y"]))
@@ -293,7 +366,7 @@ def _create_title_clip(title, template_config, duration):
         font_size=template_config["subtitle_font_size"],
         color=template_config["subtitle_color"],
         method="caption",
-        size=(900, None),
+        size=(min(video_size[0] - 220, 1320), None),
         text_align="center",
         duration=title_duration,
     ).with_position(("center", template_config["subtitle_y"]))
@@ -301,7 +374,7 @@ def _create_title_clip(title, template_config, duration):
     return [title_clip, subtitle_clip]
 
 
-def _create_caption_clips(captions_path, template_config, max_duration):
+def _create_caption_clips(captions_path, template_config, max_duration, video_size):
     caption_clips = []
 
     for caption in _parse_srt_captions(captions_path):
@@ -329,7 +402,7 @@ def _create_caption_clips(captions_path, template_config, max_duration):
         )
 
         box_width = min(
-            VIDEO_SIZE[0] - 120,
+            video_size[0] - 120,
             caption_clip.w + template_config["caption_padding"] * 2,
         )
         box_height = caption_clip.h + template_config["caption_padding"] * 2
@@ -361,9 +434,10 @@ def build_video(
     captions_path=None,
     template="default",
     image_paths=None,
+    video_format="vertical",
 ):
     """
-    Build a simple vertical MP4 video from a voiceover audio file.
+    Build a simple MP4 video from a voiceover audio file.
 
     Args:
         audio_path: Path to the generated MP3 voiceover.
@@ -371,13 +445,14 @@ def build_video(
         output_name: Human-readable name used for the output filename.
         captions_path: Optional SRT captions file to burn into the video.
         template: Built-in visual template name.
-        image_paths: Optional image paths to use as the main visual layer.
         image_paths: Optional local image paths to use as the main visual layer.
+        video_format: Output aspect format. Valid values: vertical, landscape.
 
     Returns:
         The saved MP4 file path as a string.
     """
-    template_config = _get_template_config(template)
+    video_size = _get_video_size(video_format)
+    template_config = _get_template_config(template, video_format)
     audio_file = Path(audio_path)
 
     if not audio_file.exists():
@@ -394,21 +469,26 @@ def build_video(
     duration = audio_clip.duration
 
     background_clip = (
-        _create_image_background_clip(image_paths, template_config, duration)
+        _create_image_background_clip(
+            image_paths,
+            template_config,
+            duration,
+            video_size,
+        )
         if image_paths
-        else _create_background_clip(template_config, duration)
+        else _create_background_clip(template_config, duration, video_size)
     )
-    title_clips = _create_title_clip(title, template_config, duration)
+    title_clips = _create_title_clip(title, template_config, duration, video_size)
 
     caption_clips = (
-        _create_caption_clips(captions_path, template_config, duration)
+        _create_caption_clips(captions_path, template_config, duration, video_size)
         if captions_path
         else []
     )
 
     video_clip = CompositeVideoClip(
         [background_clip, *title_clips, *caption_clips],
-        size=VIDEO_SIZE,
+        size=video_size,
     ).with_audio(audio_clip)
 
     video_clip.write_videofile(
