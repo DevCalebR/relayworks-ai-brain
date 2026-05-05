@@ -274,6 +274,8 @@ The reusable series flow is:
 4. Review `upload-check` results for organized run folders.
 5. Manually upload private videos after review.
 
+Factual series plans should still get human review before `batch-series`, especially for dates, names, locations, and unresolved theories.
+
 `series-plan` creates:
 
 - `series_bible.json`
