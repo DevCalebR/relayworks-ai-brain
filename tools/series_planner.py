@@ -11,6 +11,11 @@ from openai import OpenAI
 load_dotenv()
 
 SERIES_OUTPUT_DIR = Path("outputs/series")
+VALID_TEMPLATES = {"default", "bold", "minimal", "ai"}
+VALID_VIDEO_FORMATS = {"landscape", "vertical"}
+DEFAULT_SUGGESTED_TEMPLATE = "ai"
+DEFAULT_SUGGESTED_IMAGE_COUNT = 12
+DEFAULT_SUGGESTED_VIDEO_FORMAT = "landscape"
 
 
 def _get_client() -> OpenAI:
@@ -84,17 +89,7 @@ def _validate_series_plan(series_plan):
     episode_required_fields = [
         "episode_number",
         "title",
-        "episode_topic",
-        "hook",
         "chapter_summary",
-        "key_beats",
-        "continuity_from_previous",
-        "ending_tease",
-        "next_episode_setup",
-        "suggested_template",
-        "suggested_image_count",
-        "suggested_thumbnail_angle",
-        "suggested_video_format",
     ]
 
     for episode in episode_plan:
@@ -110,6 +105,94 @@ def _validate_series_plan(series_plan):
                 "Episode plan item "
                 f"{episode_number} is missing fields: {', '.join(missing_episode_fields)}"
             )
+
+        if not str(episode.get("title", "")).strip():
+            raise ValueError("Episode plan item title must be a non-empty string")
+
+        if not str(episode.get("chapter_summary", "")).strip():
+            episode_number = episode.get("episode_number", "unknown")
+            raise ValueError(
+                f"Episode plan item {episode_number} chapter_summary must be non-empty"
+            )
+
+        try:
+            int(episode["episode_number"])
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Episode plan item episode_number must be an integer") from exc
+
+        if episode.get("suggested_template") not in VALID_TEMPLATES:
+            raise ValueError(
+                "Episode plan item suggested_template must be one of: "
+                + ", ".join(sorted(VALID_TEMPLATES))
+            )
+
+        if not isinstance(episode.get("suggested_image_count"), int):
+            raise ValueError("Episode plan item suggested_image_count must be an integer")
+
+        if episode.get("suggested_video_format") not in VALID_VIDEO_FORMATS:
+            raise ValueError(
+                "Episode plan item suggested_video_format must be landscape or vertical"
+            )
+
+
+def _normalize_template(value):
+    template = str(value or "").strip().lower()
+    if template in VALID_TEMPLATES:
+        return template
+    if "bold" in template or "tension" in template:
+        return "bold"
+    return DEFAULT_SUGGESTED_TEMPLATE
+
+
+def _normalize_image_count(value):
+    if value is None:
+        return DEFAULT_SUGGESTED_IMAGE_COUNT
+
+    try:
+        image_count = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_SUGGESTED_IMAGE_COUNT
+
+    return image_count if image_count > 0 else DEFAULT_SUGGESTED_IMAGE_COUNT
+
+
+def _normalize_video_format(value):
+    video_format = str(value or "").strip().lower()
+    if video_format in VALID_VIDEO_FORMATS:
+        return video_format
+    return DEFAULT_SUGGESTED_VIDEO_FORMAT
+
+
+def _normalize_episode_defaults(series_plan):
+    for episode in series_plan.get("episode_plan", []):
+        if not isinstance(episode, dict):
+            continue
+
+        episode["suggested_template"] = _normalize_template(
+            episode.get("suggested_template")
+        )
+        episode["suggested_image_count"] = _normalize_image_count(
+            episode.get("suggested_image_count")
+        )
+        episode["suggested_video_format"] = _normalize_video_format(
+            episode.get("suggested_video_format")
+        )
+
+        if not episode.get("episode_topic"):
+            episode["episode_topic"] = episode.get("title", "")
+
+        for optional_field in [
+            "hook",
+            "key_beats",
+            "continuity_from_previous",
+            "ending_tease",
+            "next_episode_setup",
+            "suggested_thumbnail_angle",
+        ]:
+            default_value = [] if optional_field == "key_beats" else ""
+            episode.setdefault(optional_field, default_value)
+
+    return series_plan
 
 
 def create_series_plan(
@@ -135,10 +218,16 @@ def create_series_plan(
                 "content": (
                     "You create factual edutainment series plans for weird history, "
                     "mysteries, scary factual stories, dark history, strange historical "
-                    "events, and eerie true stories. Be cinematic and compelling, but do "
-                    "not invent fake facts or present uncertainty as certainty. Avoid "
-                    "graphic gore. Avoid fictional horror framing unless the topic is "
-                    "clearly a legend or myth. Return only valid JSON."
+                    "events, and eerie true stories. Be cinematic and compelling, but "
+                    "factual accuracy is more important than drama. Do not invent dates, "
+                    "ship launches, names, people, locations, discoveries, timelines, or "
+                    "events. If a detail is uncertain, phrase it as uncertain or omit it. "
+                    "Do not present supernatural, alien, or paranormal theories as serious "
+                    "explanations unless the requested topic is explicitly a legend or myth. "
+                    "For factual cases, supernatural theories may be mentioned only as "
+                    "cultural folklore or myths, not credible explanations. Avoid graphic "
+                    "gore. Avoid fictional horror framing unless the topic is clearly a "
+                    "legend or myth. Return only valid JSON."
                 ),
             },
             {
@@ -152,17 +241,37 @@ def create_series_plan(
                     "episode_count, tone, factual_guardrails, what_is_known, "
                     "what_is_uncertain, what_not_to_claim, key_people_or_groups, "
                     "timeline, episode_plan.\n\n"
+                    "For historical mysteries, what_is_known, what_is_uncertain, and "
+                    "what_not_to_claim are mandatory quality guardrails. Use them to "
+                    "separate documented facts from speculation. Do not guess exact dates "
+                    "or background details. For ship mysteries, do not invent launch, "
+                    "build, rename, route, captain, crew, cargo, or discovery details. "
+                    "If the topic is Mary Celeste, the factual background is that the "
+                    "ship was built/launched in 1861 as the Amazon and later renamed "
+                    "Mary Celeste; do not claim it launched in 1830.\n\n"
                     "episode_plan must be a list with exactly the requested number of "
                     "episode objects. Each episode object must include: episode_number, "
                     "title, episode_topic, hook, chapter_summary, key_beats, "
                     "continuity_from_previous, ending_tease, next_episode_setup, "
                     "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
                     "suggested_video_format.\n\n"
-                    "Use suggested_template values that are usually ai or bold for "
-                    "mystery/history content. Use suggested_image_count around 12 for "
-                    "2-3 minute episodes. Use suggested_video_format landscape. Make "
-                    "chapter_summary useful as source material for script generation, "
-                    "not as a finished script."
+                    "Episode planning style:\n"
+                    "- Episode titles must be specific, clickable, and grounded in the case.\n"
+                    "- Episode 1 must begin with the strongest mystery hook, not slow background.\n"
+                    "- Each episode must have a clear mini-arc: hook, setup, escalation, "
+                    "reveal or turn, ending tease.\n"
+                    "- Avoid generic phrases and awkward wording such as capturing event.\n"
+                    "- Avoid repeating previous episodes.\n"
+                    "- Each episode should naturally set up the next.\n"
+                    "- Chapter summaries must be detailed source material for episode "
+                    "generation, not final scripts. Include concrete facts, uncertainties, "
+                    "turning points, and guardrails for what not to overclaim.\n\n"
+                    "suggested_template must be exactly one of: default, bold, minimal, ai. "
+                    "Use ai or bold for most mystery/history episodes. Do not output custom "
+                    "template names such as mystery_build-up or tension_build-up. "
+                    "Use suggested_image_count as an integer, usually 12 for 2-3 minute "
+                    "episodes. Use suggested_video_format as landscape unless there is a "
+                    "clear reason to use vertical."
                 ),
             },
         ],
@@ -170,6 +279,7 @@ def create_series_plan(
 
     content = response.choices[0].message.content
     series_plan = _extract_json(content)
+    series_plan = _normalize_episode_defaults(series_plan)
     _validate_series_plan(series_plan)
     return series_plan
 
