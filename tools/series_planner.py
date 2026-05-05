@@ -140,7 +140,7 @@ def _extract_json(content):
             ) from exc
 
 
-def _validate_series_plan(series_plan):
+def _validate_series_plan(series_plan, expected_episodes=None):
     required_fields = [
         "series_title",
         "topic",
@@ -165,6 +165,11 @@ def _validate_series_plan(series_plan):
     if not isinstance(episode_plan, list) or not episode_plan:
         raise ValueError("Series plan episode_plan must be a non-empty list")
 
+    if expected_episodes is not None and len(episode_plan) != expected_episodes:
+        raise ValueError(
+            f"Series plan expected {expected_episodes} episodes but got {len(episode_plan)}"
+        )
+
     episode_required_fields = [
         "episode_number",
         "title",
@@ -183,6 +188,7 @@ def _validate_series_plan(series_plan):
         "avoid_repeating",
     ]
 
+    episode_numbers = []
     for episode in episode_plan:
         if not isinstance(episode, dict):
             raise ValueError("Each episode_plan item must be an object")
@@ -210,6 +216,7 @@ def _validate_series_plan(series_plan):
             episode["episode_number"] = int(episode["episode_number"])
         except (TypeError, ValueError) as exc:
             raise ValueError("Episode plan item episode_number must be an integer") from exc
+        episode_numbers.append(episode["episode_number"])
 
         for list_field in ["key_beats", "evidence_focus", "avoid_repeating"]:
             if not isinstance(episode.get(list_field), list):
@@ -230,6 +237,14 @@ def _validate_series_plan(series_plan):
         if episode.get("suggested_video_format") not in VALID_VIDEO_FORMATS:
             raise ValueError(
                 "Episode plan item suggested_video_format must be landscape or vertical"
+            )
+
+    if expected_episodes is not None:
+        expected_numbers = list(range(1, expected_episodes + 1))
+        if episode_numbers != expected_numbers:
+            raise ValueError(
+                "Series plan episode numbers must be sequential from 1 to "
+                f"{expected_episodes}"
             )
 
     _validate_topic_containment(series_plan)
@@ -276,6 +291,14 @@ def _set_default_if_missing(target, key, value):
         if isinstance(value, list):
             value = list(value)
         target[key] = value
+
+
+def _parse_positive_int(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _contains_phrase(text, phrase):
@@ -491,7 +514,10 @@ def _normalize_series_plan(
         series_plan.get("episode_plan"),
         list,
     ):
-        fallback_episode_count = len(series_plan["episode_plan"])
+        fallback_episode_count = _parse_positive_int(series_plan.get("episode_count"))
+        if fallback_episode_count is None:
+            fallback_episode_count = len(series_plan["episode_plan"])
+    expected_for_numbering = _parse_positive_int(fallback_episode_count)
 
     _set_default_if_missing(
         series_plan,
@@ -520,6 +546,7 @@ def _normalize_series_plan(
     _set_default_if_missing(series_plan, "timeline", [])
 
     series_plan = _normalize_episode_defaults(series_plan)
+    series_plan = _normalize_episode_numbers(series_plan, expected_for_numbering)
     return _normalize_episode_topic_containment(series_plan)
 
 
@@ -575,6 +602,22 @@ def _normalize_episode_defaults(series_plan):
         episode.setdefault("next_episode_setup", "")
         episode.setdefault("suggested_thumbnail_angle", "")
 
+    return series_plan
+
+
+def _normalize_episode_numbers(series_plan, expected_episodes=None):
+    episode_plan = series_plan.get("episode_plan")
+    if expected_episodes is None or not isinstance(episode_plan, list):
+        return series_plan
+
+    if len(episode_plan) != expected_episodes:
+        return series_plan
+
+    for index, episode in enumerate(episode_plan, start=1):
+        if isinstance(episode, dict):
+            episode["episode_number"] = index
+
+    series_plan["episode_count"] = expected_episodes
     return series_plan
 
 
@@ -671,7 +714,12 @@ def create_series_plan(
                     "These examples are guardrails only; apply the same containment rule "
                     "to any requested topic.\n\n"
                     "episode_plan must be a list with exactly the requested number of "
-                    "episode objects. Each episode object must include: episode_number, "
+                    "episode objects. If episodes=5, episode_plan must contain exactly "
+                    "5 objects. Episode numbers must be sequential from 1 to the requested "
+                    "episode count. Do not end the series before the requested episode "
+                    "count. Do not describe Episode 4 as the final episode if episodes=5. "
+                    "The final, legacy, or wrap-up episode must always be the last "
+                    "requested episode number. Each episode object must include: episode_number, "
                     "title, episode_topic, hook, chapter_summary, key_beats, "
                     "continuity_from_previous, ending_tease, next_episode_setup, "
                     "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
@@ -759,7 +807,7 @@ def create_series_plan(
         target_duration_seconds=target_duration_seconds,
         audience=audience_text,
     )
-    _validate_series_plan(series_plan)
+    _validate_series_plan(series_plan, expected_episodes=episodes)
     return series_plan
 
 
@@ -879,7 +927,8 @@ def _write_chapter(series_plan, episode, chapter_path):
 
 def save_series_plan(series_plan, output_name=None):
     series_plan = _normalize_series_plan(series_plan)
-    _validate_series_plan(series_plan)
+    expected_episodes = _parse_positive_int(series_plan.get("episode_count"))
+    _validate_series_plan(series_plan, expected_episodes=expected_episodes)
     SERIES_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     series_folder = _unique_series_folder(series_plan["series_title"], output_name)
