@@ -121,6 +121,65 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             DEFAULT_SUGGESTED_VIDEO_FORMAT,
         )
 
+    def test_missing_top_level_guardrails_are_normalized(self):
+        plan = _base_plan(_base_episode())
+        del plan["what_is_known"]
+        del plan["what_is_uncertain"]
+        del plan["what_not_to_claim"]
+        del plan["factual_guardrails"]
+        del plan["source_sensitivity_notes"]
+        del plan["key_people_or_groups"]
+        del plan["timeline"]
+        del plan["tone"]
+        del plan["audience"]
+        del plan["target_duration_seconds"]
+        del plan["episode_count"]
+        del plan["topic"]
+        del plan["series_title"]
+
+        normalized = _normalize_series_plan(
+            plan,
+            topic="The Dancing Plague of 1518",
+            episodes=5,
+            target_duration_seconds=150,
+            audience="fans of weird history and strange true stories",
+        )
+
+        self.assertEqual(normalized["series_title"], "The Dancing Plague of 1518")
+        self.assertEqual(normalized["topic"], "The Dancing Plague of 1518")
+        self.assertEqual(
+            normalized["audience"],
+            "fans of weird history and strange true stories",
+        )
+        self.assertEqual(normalized["target_duration_seconds"], 150)
+        self.assertEqual(normalized["episode_count"], 5)
+        self.assertTrue(normalized["what_is_known"])
+        self.assertTrue(normalized["what_is_uncertain"])
+        self.assertTrue(normalized["what_not_to_claim"])
+        self.assertTrue(normalized["factual_guardrails"])
+        self.assertTrue(normalized["source_sensitivity_notes"])
+        self.assertEqual(normalized["key_people_or_groups"], [])
+        self.assertEqual(normalized["timeline"], [])
+        _validate_series_plan(normalized)
+
+    def test_missing_episode_plan_still_fails_validation(self):
+        plan = _base_plan(_base_episode())
+        del plan["episode_plan"]
+
+        normalized = _normalize_series_plan(
+            plan,
+            topic="The Dancing Plague of 1518",
+            episodes=5,
+            target_duration_seconds=150,
+            audience="fans of weird history and strange true stories",
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Series plan episode_plan must be a non-empty list",
+        ):
+            _validate_series_plan(normalized)
+
 
 if __name__ == "__main__":
     unittest.main()
