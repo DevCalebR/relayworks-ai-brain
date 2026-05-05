@@ -38,10 +38,33 @@ DEFAULT_WHAT_NOT_TO_CLAIM = (
 DEFAULT_SOURCE_SENSITIVITY_NOTES = [
     "Historical retellings may exaggerate details; review dates, names, locations, evidence descriptions, and theories before production.",
 ]
+DEFAULT_SERIES_NARRATIVE_ARC = (
+    "The series should begin with the central mystery, escalate through context and "
+    "evidence, test the strongest explanations, and end with a careful account of "
+    "what the record can and cannot resolve."
+)
 GENERIC_EVIDENCE_TERMS = {
     "expert opinions",
     "interviews",
     "unnamed sources",
+    "scholarly articles",
+    "psychological studies",
+    "historical documents",
+    "medical records",
+}
+GENERIC_TITLE_PHRASES = {
+    "the beginning",
+    "the evidence",
+    "the theories",
+    "the legacy",
+    "life before the mystery",
+    "what happened",
+}
+SENSATIONAL_TITLE_PHRASES = {
+    "dancing until dead",
+    "the killer dance",
+    "everyone died dancing",
+    "the curse that killed them",
 }
 SUSPICIOUS_TOPIC_TERMS = {
     "cryptic notes",
@@ -149,6 +172,7 @@ def _validate_series_plan(series_plan, expected_episodes=None):
         "episode_count",
         "tone",
         "factual_guardrails",
+        "series_narrative_arc",
         "what_is_known",
         "what_is_uncertain",
         "what_not_to_claim",
@@ -313,6 +337,31 @@ def _contains_any_phrase(text, phrases):
 def _contains_any_word(text, words):
     normalized = str(text or "").lower()
     return any(re.search(rf"\b{re.escape(word)}\b", normalized) for word in words)
+
+
+def _title_needs_story_repair(title):
+    normalized = str(title or "").strip().lower()
+    if not normalized:
+        return True
+    return normalized in GENERIC_TITLE_PHRASES or normalized in SENSATIONAL_TITLE_PHRASES
+
+
+def _default_story_job(episode_number, episode_count):
+    if episode_count == 5:
+        jobs = {
+            1: "Open with the strongest hook and establish why the mystery matters.",
+            2: "Build pressure through backstory, timeline, and context without becoming a dry history dump.",
+            3: "Separate the strongest evidence and contradictions from later retellings.",
+            4: "Test the leading theories, what they explain, and what they fail to explain.",
+            5: "Deliver a careful finale with legacy, strongest explanation, and what remains unknown.",
+        }
+        return jobs.get(episode_number)
+
+    if episode_number == 1:
+        return "Open with the strongest hook and establish why the mystery matters."
+    if episode_count and episode_number == episode_count:
+        return "Deliver a careful finale that resolves what can be resolved and names what remains unknown."
+    return "Advance the serialized story with new evidence, context, or tension."
 
 
 def _topic_profile(series_plan):
@@ -534,6 +583,11 @@ def _normalize_series_plan(
     _set_default_if_missing(series_plan, "episode_count", fallback_episode_count)
     _set_default_if_missing(series_plan, "tone", DEFAULT_SERIES_TONE)
     _set_default_if_missing(series_plan, "factual_guardrails", DEFAULT_FACTUAL_GUARDRAILS)
+    _set_default_if_missing(
+        series_plan,
+        "series_narrative_arc",
+        DEFAULT_SERIES_NARRATIVE_ARC,
+    )
     _set_default_if_missing(series_plan, "what_is_known", DEFAULT_WHAT_IS_KNOWN)
     _set_default_if_missing(series_plan, "what_is_uncertain", DEFAULT_WHAT_IS_UNCERTAIN)
     _set_default_if_missing(series_plan, "what_not_to_claim", DEFAULT_WHAT_NOT_TO_CLAIM)
@@ -567,6 +621,7 @@ def _validate_topic_containment(series_plan):
 
 
 def _normalize_episode_defaults(series_plan):
+    episode_count = _parse_positive_int(series_plan.get("episode_count"))
     for episode in series_plan.get("episode_plan", []):
         if not isinstance(episode, dict):
             continue
@@ -588,6 +643,22 @@ def _normalize_episode_defaults(series_plan):
             episode["episode_number"] = int(episode["episode_number"])
         except (KeyError, TypeError, ValueError):
             pass
+
+        episode_number = _parse_positive_int(episode.get("episode_number"))
+        episode["story_job"] = str(
+            episode.get("story_job")
+            or _default_story_job(episode_number, episode_count)
+            or "Advance the serialized story with new evidence, context, or tension."
+        )
+
+        if _title_needs_story_repair(episode.get("title")):
+            episode_topic = str(episode.get("episode_topic", "")).strip()
+            if episode_topic and not _title_needs_story_repair(episode_topic):
+                episode["title"] = episode_topic
+            elif episode_number:
+                episode["title"] = f"Episode {episode_number}: Evidence and Tension"
+            else:
+                episode["title"] = "Evidence and Tension"
 
         episode["key_beats"] = _normalize_list(episode.get("key_beats"))
         episode["evidence_focus"] = _normalize_list(
@@ -684,9 +755,15 @@ def create_series_plan(
                     f"Target duration per episode: {target_duration_seconds} seconds\n\n"
                     "Return one JSON object with these top-level fields:\n"
                     "series_title, topic, audience, target_duration_seconds, "
-                    "episode_count, tone, factual_guardrails, what_is_known, "
-                    "what_is_uncertain, what_not_to_claim, source_sensitivity_notes, "
-                    "key_people_or_groups, timeline, episode_plan.\n\n"
+                    "episode_count, tone, factual_guardrails, series_narrative_arc, "
+                    "what_is_known, what_is_uncertain, what_not_to_claim, "
+                    "source_sensitivity_notes, key_people_or_groups, timeline, "
+                    "episode_plan.\n\n"
+                    "series_narrative_arc is mandatory. In a few sentences, describe "
+                    "where the mystery begins, how the story escalates, the central "
+                    "tension, and what the finale resolves or leaves unknown. The whole "
+                    "series should feel like one connected eerie, cinematic, factual, "
+                    "curiosity-driven documentary arc, not separate school-report topics.\n\n"
                     "Mandatory top-level factual guardrail fields:\n"
                     "- what_is_known\n"
                     "- what_is_uncertain\n"
@@ -720,45 +797,65 @@ def create_series_plan(
                     "count. Do not describe Episode 4 as the final episode if episodes=5. "
                     "The final, legacy, or wrap-up episode must always be the last "
                     "requested episode number. Each episode object must include: episode_number, "
-                    "title, episode_topic, hook, chapter_summary, key_beats, "
+                    "title, episode_topic, story_job, hook, chapter_summary, key_beats, "
                     "continuity_from_previous, ending_tease, next_episode_setup, "
                     "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
                     "suggested_video_format, evidence_focus, avoid_repeating.\n\n"
                     "evidence_focus must be a list of concrete evidence, known facts, "
                     "documents, locations, artifacts, or observations the episode should "
-                    "use, such as last log entry, missing boat, cargo condition, official "
-                    "inquiry, weather reports, witness report, location of discovery, or "
-                    "timeline gap. If there is no concrete evidence, say the episode is "
+                    "use. Make entries specific to the topic, such as city council response, "
+                    "contemporary chronicle accounts, carefully qualified reported numbers, "
+                    "religious beliefs around St. Vitus, famine, disease, or social stress "
+                    "context, later retellings versus documented claims, last log entry, "
+                    "cargo condition, official inquiry, weather reports, witness report, "
+                    "location of discovery, or timeline gap. If there is no concrete evidence, say the episode is "
                     "interpretive or reflective and identify what it should avoid "
                     "overstating. Do not list generic or fake-source evidence such as "
-                    "expert opinions, interviews, unnamed sources, cryptic notes, empty "
-                    "ships, drifting vessels, or lifeboats unless they are specifically "
+                    "scholarly articles, expert opinions, psychological studies, interviews, "
+                    "historical documents, medical records, unnamed sources, cryptic notes, "
+                    "empty ships, drifting vessels, or lifeboats unless they are specifically "
                     "supported by the requested topic; if they are only legend material, "
-                    "label them as disputed folklore. avoid_repeating must list what this episode should not "
-                    "repeat from earlier episodes.\n\n"
+                    "label them as disputed folklore. avoid_repeating must list specific "
+                    "things this episode should not repeat from earlier episodes, such as "
+                    "Do not re-explain the first dancer except in one sentence, Do not "
+                    "repeat the full city background from Episode 2, or Do not treat "
+                    "disputed death counts as established fact.\n\n"
                     "Episode planning style:\n"
-                    "- Every episode must have a distinct job in the series.\n"
+                    "- Every episode must have a distinct story_job, reveal something new, "
+                    "avoid repeating prior episodes, and end with a specific reason to continue.\n"
+                    "- The whole series must feel like a connected story arc with escalating "
+                    "questions, not a list of interchangeable topics.\n"
                     "- For a 5-episode factual mystery, prefer this structure unless the "
-                    "topic demands otherwise: Episode 1 strongest hook/discovery/central "
-                    "mystery; Episode 2 backstory and timeline leading up to the mystery; "
-                    "Episode 3 main evidence and contradictions; Episode 4 theories and "
-                    "what each theory fails to explain; Episode 5 legacy, most likely "
-                    "explanation, and what remains unknown.\n"
-                    "- Episode titles must be specific, clickable, and grounded in the case.\n"
+                    "topic demands otherwise: Episode 1 strongest hook and central mystery, "
+                    "so the viewer understands why the story matters; Episode 2 pressure, "
+                    "backstory, timeline, and context focused on the conditions that made "
+                    "the mystery possible, not a dry history dump; Episode 3 strongest "
+                    "evidence, contradictions, documents, clues, or witness accounts, "
+                    "carefully separating known facts from later retellings; Episode 4 "
+                    "theories, what each theory explains, and what each theory fails to "
+                    "explain, with no theory presented as proven unless it is established; "
+                    "Episode 5 legacy, most likely explanation if appropriate, and what "
+                    "remains unknown, with an emotionally satisfying but careful ending.\n"
+                    "- Episode titles must be specific, clickable, factual, dramatic without "
+                    "overclaiming, different from each other, and tied to the episode's unique job.\n"
                     "- If the topic is about a lighthouse, titles must not reference ships "
                     "unless the actual topic includes a ship. If the topic is about a ship, "
                     "titles must not reference lighthouses unless the actual topic includes "
                     "a lighthouse.\n"
-                    "- Avoid generic titles like The Theories, The Clues, The Enduring "
-                    "Mystery, or Life Aboard.\n"
-                    "- Prefer concrete titles like The Lighthouse Went Silent, The Last "
-                    "Logbook, The Search That Found Nothing, or The Theory That Almost "
-                    "Fits, but do not overclaim. Use ship-specific titles such as The "
-                    "Empty Ship Found Drifting only for actual ship cases.\n"
+                    "- Avoid generic titles like The Beginning, The Evidence, The Theories, "
+                    "The Legacy, Life Before the Mystery, What Happened, The Clues, The "
+                    "Enduring Mystery, or Life Aboard.\n"
+                    "- Avoid sensational titles that overstate uncertainty, such as Dancing "
+                    "Until Dead, The Killer Dance, Everyone Died Dancing, or The Curse "
+                    "That Killed Them.\n"
+                    "- Prefer concrete titles like The Town That Couldn't Stop Moving, The "
+                    "City Under Pressure, What the Records Actually Say, The Theory That "
+                    "Almost Fits, What Still Doesn't Add Up, The Lighthouse Went Silent, "
+                    "The Last Logbook, or The Search That Found Nothing, but do not overclaim.\n"
                     "- Hooks must be one or two strong sentences that open with a concrete "
-                    "mystery, fact, clue, contradiction, or disappearance. Avoid generic "
-                    "hooks like What happened, The mystery remains, or Why does this still "
-                    "haunt history.\n"
+                    "image, contradiction, discovery, or eerie fact. Avoid generic "
+                    "questions, This episode explores, In this episode we will, What really "
+                    "happened, The mystery remains, or Why does this still haunt history.\n"
                     "- Episode 1 must begin with the strongest mystery hook, not slow background.\n"
                     "- Each episode must have a clear mini-arc: hook, setup, escalation, "
                     "reveal or turn, ending tease.\n"
@@ -772,21 +869,41 @@ def create_series_plan(
                     "not prove.\n"
                     "- Avoid repeating previous episodes.\n"
                     "- Each episode should naturally set up the next.\n"
-                    "- Chapter summaries must be 120-220 words each, with no markdown "
+                    "- Chapter summaries must be 150-240 words each, with no markdown "
                     "inside JSON. They must be detailed source material, not final narration "
-                    "scripts. Include the episode mini-arc, what the viewer learns, concrete "
-                    "facts, uncertainties, turning points, what not to overclaim, and how "
-                    "the episode connects to the next.\n"
-                    "- key_beats must include 5-8 specific beats per episode. Avoid generic "
-                    "beats like Introduction, Discussion, Expert analysis, or Final thoughts. "
-                    "Use concrete beats that can become scenes.\n"
+                    "scripts. Include a strong opening situation, the episode's main question, "
+                    "what evidence or context the episode uses, how the story escalates, "
+                    "what the viewer learns, and how the episode connects to the next. "
+                    "Avoid academic phrasing like This episode investigates, Viewers will "
+                    "learn, This episode discusses, or explores various factors. Prefer "
+                    "story-forward phrasing like The episode opens in, The tension builds "
+                    "when, The key turn comes when, and By the end, the viewer understands.\n"
+                    "- key_beats must include 6-9 specific scene-like story beats per episode. "
+                    "Avoid generic beats like Introduction, Discussion, Expert analysis, "
+                    "Historical context, Final thoughts, or Compare theories. Use concrete "
+                    "beats that can become scenes.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
-                    "teases like The legend continues, The mystery remains, or What happened "
-                    "next. Do not use unsupported claims such as cryptic notes unless the "
+                    "teases like What happened next, The mystery continues, More questions "
+                    "remain, The legend continues, or The mystery remains. Do not use "
+                    "unsupported claims such as cryptic notes unless the "
                     "episode establishes them as real or disputed. Prefer concrete teases "
-                    "such as The search should have answered everything. Instead, it made "
-                    "the timeline harder to explain.\n"
+                    "such as But the city's response may have turned a strange outbreak into "
+                    "something even harder to control, Before we can judge the theories, we "
+                    "have to ask what the records actually say and what they leave out, or "
+                    "The most famous explanation sounds convincing at first, until one detail "
+                    "gets in the way.\n"
+                    "- The final episode must not end vaguely with The mystery remains, The "
+                    "legend continues, We may never know, or The story still fascinates us "
+                    "today. It must identify the core unresolved tension, such as what the "
+                    "records can show versus what they cannot explain.\n"
                     "- next_episode_setup must clearly name what the next episode investigates.\n\n"
+                    "Factual caution must preserve drama without overclaiming. Avoid "
+                    "overstating deaths, causes, motives, official findings, or exact numbers "
+                    "when uncertain. Label disputed details as disputed. Use careful phrases "
+                    "such as some accounts claim, later retellings suggest, records are "
+                    "limited, historians still debate, one possible explanation, or the "
+                    "evidence does not prove. Avoid bad phrasing such as records prove, "
+                    "experts confirmed, everyone knew, the real cause was, or the truth is.\n\n"
                     "suggested_template must be exactly one of: default, bold, minimal, ai. "
                     "Use ai or bold for most mystery/history episodes. Do not output custom "
                     "template names such as mystery_build-up or tension_build-up. "
@@ -830,6 +947,9 @@ def _write_full_story(series_plan, full_story_path):
         f"Audience: {series_plan['audience']}",
         f"Target duration: {series_plan['target_duration_seconds']} seconds",
         "",
+        "## Series Narrative Arc",
+        _markdown_list(series_plan.get("series_narrative_arc")),
+        "",
         "## What Is Known",
         _markdown_list(series_plan.get("what_is_known")),
         "",
@@ -853,6 +973,8 @@ def _write_full_story(series_plan, full_story_path):
             [
                 "",
                 f"### Episode {int(episode['episode_number']):02d}: {episode['title']}",
+                "",
+                f"Story job: {episode.get('story_job', '')}",
                 "",
                 str(episode.get("chapter_summary", "")).strip(),
                 "",
@@ -887,6 +1009,9 @@ def _write_chapter(series_plan, episode, chapter_path):
         "",
         f"Series: {series_plan['series_title']}",
         f"Episode topic: {episode['episode_topic']}",
+        "",
+        "## Story Job",
+        str(episode.get("story_job", "")).strip(),
         "",
         "## Hook",
         str(episode.get("hook", "")).strip(),

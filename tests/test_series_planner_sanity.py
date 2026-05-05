@@ -17,6 +17,10 @@ def _base_plan(episode):
         "episode_count": 1,
         "tone": "careful and eerie",
         "factual_guardrails": ["Do not invent evidence."],
+        "series_narrative_arc": (
+            "The series begins with the disappearance, escalates through the record, "
+            "and ends by naming what remains unresolved."
+        ),
         "what_is_known": ["Three lighthouse keepers disappeared in December 1900."],
         "what_is_uncertain": ["The exact sequence of events is unknown."],
         "what_not_to_claim": ["Do not claim unsupported notes or vessels existed."],
@@ -246,6 +250,58 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             [1, 2, 3, 4, 5],
         )
         _validate_series_plan(normalized, expected_episodes=5)
+
+    def test_missing_series_narrative_arc_is_normalized(self):
+        plan = _base_plan(_base_episode())
+        del plan["series_narrative_arc"]
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertTrue(normalized["series_narrative_arc"])
+        _validate_series_plan(normalized)
+
+    def test_story_job_defaults_for_episode(self):
+        plan = _base_plan(_base_episode())
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertIn("strongest hook", normalized["episode_plan"][0]["story_job"])
+        _validate_series_plan(normalized)
+
+    def test_generic_and_sensational_title_is_repaired(self):
+        plan = _base_plan(
+            _base_episode(
+                title="Dancing Until Dead",
+                episode_topic="What the Records Actually Say",
+            )
+        )
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertEqual(
+            normalized["episode_plan"][0]["title"],
+            "What the Records Actually Say",
+        )
+        _validate_series_plan(normalized)
+
+    def test_generic_evidence_focus_is_filtered(self):
+        plan = _base_plan(
+            _base_episode(
+                evidence_focus=[
+                    "scholarly articles",
+                    "expert opinions",
+                    "city council response",
+                ]
+            )
+        )
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertEqual(
+            normalized["episode_plan"][0]["evidence_focus"],
+            ["city council response"],
+        )
+        _validate_series_plan(normalized)
 
 
 if __name__ == "__main__":
