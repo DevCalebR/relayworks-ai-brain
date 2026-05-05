@@ -16,6 +16,10 @@ outputs/metadata/*.json
 outputs/topics/*.json
 outputs/topics/*.txt
 outputs/topics/*.md
+outputs/series/*
+!outputs/series/.gitkeep
+outputs/batches/*.json
+!outputs/batches/.gitkeep
 outputs/images/*.png
 outputs/thumbnails/*.png
 outputs/thumbnails/*.jpg

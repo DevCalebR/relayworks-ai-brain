@@ -1,9 +1,11 @@
 import argparse
 import json
+from datetime import datetime
+from pathlib import Path
 
 from moviepy import AudioFileClip
 
-from agents.script_agent import generate_script
+from agents.script_agent import generate_episode_script_from_chapter, generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
 from tools.image_generator import generate_scene_images
@@ -11,6 +13,12 @@ from tools.image_inputs import collect_image_paths
 from tools.logger import log_pipeline_run
 from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
+from tools.series_planner import (
+    create_series_plan,
+    get_episode_source,
+    load_series_plan,
+    save_series_plan,
+)
 from tools.test_audio import create_test_audio
 from tools.text_cleaner import clean_narration_text, ensure_call_to_action
 from tools.thumbnail_generator import generate_thumbnail
@@ -26,6 +34,7 @@ DEFAULT_TARGET_DURATION_SECONDS = 150
 DEFAULT_CAPTION_OFFSET = 1.2
 DEFAULT_WORDS_PER_CAPTION = 8
 DEFAULT_SECONDS_PER_CAPTION = 2.5
+BATCH_OUTPUT_DIR = Path("outputs/batches")
 
 
 def parse_args():
@@ -46,13 +55,15 @@ def parse_args():
             "upload",
             "thumbnail",
             "topic-research",
+            "series-plan",
+            "batch-series",
         ],
         default="full",
         help="Pipeline mode to run.",
     )
     parser.add_argument(
         "--topic",
-        default=DEFAULT_TOPIC,
+        default=None,
         help="Topic to use for script generation or video title.",
     )
     parser.add_argument(
@@ -167,6 +178,25 @@ def parse_args():
         default=10,
         help="Number of topic ideas to generate when --mode topic-research.",
     )
+    parser.add_argument(
+        "--episodes",
+        type=int,
+        default=5,
+        help="Number of episodes to plan when --mode series-plan.",
+    )
+    parser.add_argument(
+        "--series-folder",
+        help="Series folder path required when --mode batch-series.",
+    )
+    parser.add_argument(
+        "--episode",
+        type=int,
+        help="Single episode number to generate when --mode batch-series.",
+    )
+    parser.add_argument(
+        "--episodes-range",
+        help="Episode range to generate when --mode batch-series, for example 1-5.",
+    )
     return parser.parse_args()
 
 
@@ -223,9 +253,298 @@ def print_topic_research(topics, saved_path):
         )
 
 
+def print_series_plan_result(saved_paths):
+    print("\nSaved series folder:")
+    print(saved_paths["series_folder"])
+    print("\nSaved series bible path:")
+    print(saved_paths["series_bible_path"])
+    print("\nSaved episode plan path:")
+    print(saved_paths["episode_plan_path"])
+    print("\nSaved full story path:")
+    print(saved_paths["full_story_path"])
+    print("\nSaved chapter paths:")
+    for chapter_path in saved_paths["chapter_paths"]:
+        print(chapter_path)
+
+
+def _episode_title(episode_plan):
+    return str(episode_plan.get("title") or episode_plan.get("episode_topic"))
+
+
+def _episode_topic(series_bible, episode_plan):
+    series_title = series_bible.get("series_title", series_bible.get("topic", "Series"))
+    return (
+        f"{series_title} Episode {int(episode_plan['episode_number'])}: "
+        f"{_episode_title(episode_plan)}"
+    )
+
+
+def _parse_episodes_range(value):
+    try:
+        start_text, end_text = value.split("-", 1)
+        start = int(start_text)
+        end = int(end_text)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise ValueError("--episodes-range must use the format START-END") from exc
+
+    if start <= 0 or end <= 0:
+        raise ValueError("--episodes-range values must be greater than 0")
+    if start > end:
+        raise ValueError("--episodes-range start must be less than or equal to end")
+
+    return list(range(start, end + 1))
+
+
+def _select_batch_episodes(args, episode_plan):
+    if args.episode is not None and args.episodes_range:
+        raise ValueError("Use either --episode or --episodes-range, not both")
+
+    available_episodes = {
+        int(episode["episode_number"]) for episode in episode_plan
+    }
+
+    if args.episode is not None:
+        if args.episode <= 0:
+            raise ValueError("--episode must be greater than 0")
+        selected_episodes = [args.episode]
+    elif args.episodes_range:
+        selected_episodes = _parse_episodes_range(args.episodes_range)
+    else:
+        selected_episodes = sorted(available_episodes)
+
+    missing_episodes = [
+        episode_number
+        for episode_number in selected_episodes
+        if episode_number not in available_episodes
+    ]
+    if missing_episodes:
+        raise ValueError(
+            "Requested episodes do not exist in the series plan: "
+            + ", ".join(str(episode_number) for episode_number in missing_episodes)
+        )
+
+    return selected_episodes
+
+
+def _write_batch_summary(summary):
+    BATCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    series_slug = Path(summary["series_folder"]).name or "series"
+    timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    summary_path = BATCH_OUTPUT_DIR / f"{series_slug}-batch-{timestamp}.json"
+    summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
+    return str(summary_path)
+
+
+def _write_episode_record(series_folder, episode_source, result):
+    episode_plan = episode_source["episode_plan"]
+    episode_number = int(episode_plan["episode_number"])
+    episodes_folder = Path(series_folder) / "episodes"
+    episodes_folder.mkdir(parents=True, exist_ok=True)
+
+    record = {
+        "episode_number": episode_number,
+        "title": _episode_title(episode_plan),
+        "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "chapter_path": str(
+            Path(series_folder) / "chapters" / f"episode-{episode_number:02d}.md"
+        ),
+        "summary": episode_plan.get("chapter_summary"),
+        "starts_from": episode_plan.get("continuity_from_previous"),
+        "ends_with": episode_plan.get("ending_tease"),
+        "next_episode_tease": episode_plan.get("next_episode_setup"),
+        "run_folder": result.get("run_folder"),
+        "upload_ready": bool(
+            result.get("upload_check_result", {}).get("ready")
+            if result.get("upload_check_result")
+            else False
+        ),
+        "youtube_video_id": None,
+    }
+
+    record_path = episodes_folder / f"episode-{episode_number:02d}.json"
+    record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    return str(record_path)
+
+
+def generate_full_outputs(topic, script, args):
+    narration_text = ensure_call_to_action(clean_narration_text(script))
+    script_path = save_script(topic, script)
+    outputs = {"script": script_path}
+
+    metadata_path = save_video_metadata(topic, script, topic)
+    outputs["metadata"] = metadata_path
+
+    print("\nSaved metadata path:")
+    print(metadata_path)
+
+    image_paths = []
+    if args.use_ai_images:
+        image_paths = generate_scene_images(
+            topic,
+            narration_text,
+            topic,
+            image_count=args.image_count,
+            template=args.template,
+            video_format=args.video_format,
+        )
+        outputs["images"] = image_paths
+        outputs["ai_images_used"] = True
+        outputs["image_count"] = len(image_paths)
+
+        print("\nSaved AI image paths:")
+        for image_path in image_paths:
+            print(image_path)
+
+    if args.generate_thumbnail:
+        thumbnail_source_paths = None
+
+        if image_paths and not args.use_ai_thumbnail:
+            thumbnail_source_paths = [image_paths[0]]
+
+        thumbnail_path = generate_thumbnail(
+            topic,
+            topic,
+            source_image_paths=thumbnail_source_paths,
+            use_ai=args.use_ai_thumbnail,
+            template=args.template,
+        )
+        outputs["thumbnail"] = thumbnail_path
+
+        print("\nSaved thumbnail path:")
+        print(thumbnail_path)
+
+    audio_path = generate_voiceover(narration_text, topic)
+    outputs["audio"] = audio_path
+
+    print("\nSaved audio path:")
+    print(audio_path)
+
+    audio_duration = get_audio_duration_seconds(audio_path)
+    captions_path = save_srt_captions(
+        narration_text,
+        topic,
+        words_per_caption=args.words_per_caption,
+        seconds_per_caption=args.seconds_per_caption,
+        total_duration_seconds=audio_duration,
+        start_offset_seconds=args.caption_offset,
+    )
+    outputs["captions"] = captions_path
+    outputs["caption_offset"] = args.caption_offset
+    outputs["words_per_caption"] = args.words_per_caption
+    outputs["seconds_per_caption"] = args.seconds_per_caption
+
+    print("\nSaved captions path:")
+    print(captions_path)
+
+    video_path = build_video(
+        audio_path,
+        topic,
+        topic,
+        captions_path,
+        template=args.template,
+        image_paths=image_paths,
+        video_format=args.video_format,
+    )
+    outputs["video"] = video_path
+    outputs["template"] = args.template
+    outputs["video_format"] = args.video_format
+    outputs["images_used"] = bool(image_paths)
+    outputs["image_count"] = len(image_paths)
+
+    print("\nSaved video path:")
+    print(video_path)
+
+    return outputs
+
+
+def run_batch_series(args):
+    if not args.series_folder:
+        raise ValueError("--series-folder is required when --mode batch-series")
+
+    loaded_plan = load_series_plan(args.series_folder)
+    selected_episodes = _select_batch_episodes(args, loaded_plan["episode_plan"])
+    started_at = datetime.now().isoformat(timespec="seconds")
+    summary = {
+        "series_folder": args.series_folder,
+        "started_at": started_at,
+        "completed_at": None,
+        "selected_episodes": selected_episodes,
+        "successful_episodes": [],
+        "failed_episode": None,
+        "episode_results": [],
+    }
+
+    for episode_number in selected_episodes:
+        try:
+            episode_source = get_episode_source(args.series_folder, episode_number)
+            episode_plan = episode_source["episode_plan"]
+            topic = _episode_topic(episode_source["series_bible"], episode_plan)
+            script = generate_episode_script_from_chapter(
+                episode_source,
+                target_duration_seconds=args.target_duration_seconds,
+            )
+
+            print(f"\nGenerated episode {episode_number} script:")
+            print(script)
+
+            outputs = generate_full_outputs(topic, script, args)
+            run_folder = None
+            upload_check_result = None
+
+            if args.organize:
+                organize_result = organize_run_outputs(topic, outputs)
+                run_folder = organize_result["run_folder"]
+                outputs["run_folder"] = run_folder
+                outputs["copied_outputs"] = organize_result["copied_outputs"]
+
+                print("\nOrganized run folder:")
+                print(run_folder)
+
+                upload_check_result = validate_upload_package(run_folder)
+                outputs["upload_check_result"] = upload_check_result
+
+                print("\nUpload check result:")
+                print(json.dumps(upload_check_result, indent=2))
+
+            result = {
+                "episode_number": episode_number,
+                "episode_title": _episode_title(episode_plan),
+                "script_path": outputs.get("script"),
+                "captions_path": outputs.get("captions"),
+                "metadata_path": outputs.get("metadata"),
+                "audio_path": outputs.get("audio"),
+                "video_path": outputs.get("video"),
+                "thumbnail_path": outputs.get("thumbnail"),
+                "run_folder": run_folder,
+                "upload_check_result": upload_check_result,
+            }
+            result["episode_record_path"] = _write_episode_record(
+                args.series_folder,
+                episode_source,
+                result,
+            )
+
+            summary["successful_episodes"].append(episode_number)
+            summary["episode_results"].append(result)
+        except Exception as exc:
+            summary["failed_episode"] = episode_number
+            summary["completed_at"] = datetime.now().isoformat(timespec="seconds")
+            summary_path = _write_batch_summary(summary)
+            raise RuntimeError(
+                f"Batch-series failed on episode {episode_number}. "
+                f"Saved batch summary to {summary_path}. Original error: {exc}"
+            ) from exc
+
+    summary["completed_at"] = datetime.now().isoformat(timespec="seconds")
+    summary_path = _write_batch_summary(summary)
+
+    print("\nSaved batch summary path:")
+    print(summary_path)
+
+
 def main():
     args = parse_args()
-    topic = args.topic
+    topic = args.topic or DEFAULT_TOPIC
     image_paths = []
 
     if args.image_count <= 0:
@@ -239,6 +558,27 @@ def main():
 
     if args.target_duration_seconds <= 0:
         raise ValueError("--target-duration-seconds must be greater than 0")
+
+    if args.episodes <= 0:
+        raise ValueError("--episodes must be greater than 0")
+
+    if args.mode == "series-plan":
+        if not args.topic:
+            raise ValueError("--topic is required when --mode series-plan")
+
+        series_plan = create_series_plan(
+            topic=args.topic,
+            episodes=args.episodes,
+            target_duration_seconds=args.target_duration_seconds,
+            audience=args.audience,
+        )
+        saved_paths = save_series_plan(series_plan)
+        print_series_plan_result(saved_paths)
+        return
+
+    if args.mode == "batch-series":
+        run_batch_series(args)
+        return
 
     if args.mode == "topic-research":
         if not args.niche:

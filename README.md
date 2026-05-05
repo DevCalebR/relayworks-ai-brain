@@ -17,6 +17,8 @@ The pipeline currently supports these CLI modes:
 - `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and optional OpenAI-generated scene images.
 - `thumbnail`: generates a local 1280x720 thumbnail image without generating a video or calling YouTube.
 - `topic-research`: generates and ranks local OpenAI-based YouTube Shorts topic ideas.
+- `series-plan`: generates a reusable series bible, episode plan, full story, and chapter source files.
+- `batch-series`: generates selected episodes from a saved series plan using the existing full video pipeline.
 - `upload-check`: validates an organized run folder before upload.
 - `upload`: uploads `video.mp4` from a validated organized run folder using `metadata.json`.
 
@@ -38,8 +40,12 @@ Common options:
 - `--privacy-status`: controls YouTube visibility for `upload` mode. Use `private` by default.
 - `--upload-thumbnail`: optionally uploads `thumbnail.png` from the run folder after a successful video upload.
 - `--niche`: sets the niche to research in `topic-research` mode.
-- `--audience`: optionally sets the target audience in `topic-research` mode.
+- `--audience`: optionally sets the target audience in `topic-research` and `series-plan` modes.
 - `--topic-count`: controls how many topic ideas to generate in `topic-research` mode.
+- `--episodes`: controls how many episodes to create in `series-plan` mode.
+- `--series-folder`: points `batch-series` to a saved folder under `outputs/series/`.
+- `--episode`: generates one episode from a saved series plan.
+- `--episodes-range`: generates an inclusive episode range from a saved series plan, such as `1-5`.
 
 The default topic is:
 
@@ -180,6 +186,32 @@ python main.py --mode topic-research --niche "weird history mysteries" --audienc
 
 Topic research uses OpenAI only. It does not call YouTube APIs, scrape the web, use YouTube trend data, or use analytics feedback yet. Generated topic research JSON files are saved under `outputs/topics/` and should not be committed.
 
+Generate a reusable series plan:
+
+```bash
+python main.py --mode series-plan \
+  --topic "The Mary Celeste" \
+  --episodes 5 \
+  --target-duration-seconds 150
+```
+
+Generate selected episodes from a saved series plan:
+
+```bash
+python main.py --mode batch-series \
+  --series-folder outputs/series/the-mary-celeste \
+  --episodes-range 1-5 \
+  --template ai \
+  --organize \
+  --use-ai-images \
+  --image-count 12 \
+  --generate-thumbnail \
+  --target-duration-seconds 150 \
+  --video-format landscape
+```
+
+`batch-series` does not upload to YouTube by default and does not call the upload mode. It writes local assets, can organize each episode into a run folder, and runs `upload-check` only for organized run folders.
+
 Validate an organized run folder before upload:
 
 ```bash
@@ -231,6 +263,26 @@ python main.py --mode upload --run-folder "$(ls -td outputs/runs/*/ | head -1)" 
 ```
 
 After upload, review the video in YouTube Studio before publishing. Private uploads are visible only in the correct authorized YouTube Studio channel.
+
+## Series Workflow
+
+The reusable series flow is:
+
+1. Generate a series plan with `--mode series-plan`.
+2. Review the generated series bible, episode plan, full story, and chapter files under `outputs/series/<series-slug>/`.
+3. Generate selected episodes with `--mode batch-series`.
+4. Review `upload-check` results for organized run folders.
+5. Manually upload private videos after review.
+
+`series-plan` creates:
+
+- `series_bible.json`
+- `episode_plan.json`
+- `full_story.md`
+- `chapters/episode-XX.md`
+- `episodes/` for generated per-episode records
+
+`batch-series` writes batch summaries under `outputs/batches/` and writes per-episode records under `outputs/series/<series-slug>/episodes/episode-XX.json`. Generated series folders and batch summary JSON files are ignored by Git. Keep only `.gitkeep` files tracked in those folders.
 
 ## Upload Readiness Checks
 
@@ -416,6 +468,8 @@ Generated outputs are written under `outputs/` and `memory/`:
 - `outputs/images/`: generated OpenAI scene images.
 - `outputs/thumbnails/`: generated thumbnail images.
 - `outputs/topics/`: generated OpenAI topic research `.json` files.
+- `outputs/series/`: generated series bibles, episode plans, chapter files, and per-episode records.
+- `outputs/batches/`: generated batch summary `.json` files.
 - `outputs/runs/`: timestamped organized copies of successful run outputs.
 - `memory/logs.json`: successful generation run log.
 
@@ -429,9 +483,9 @@ A complete organized `full` run can contain:
 - `thumbnail.png`
 - `images/` if image copying is implemented
 
-Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, generated topic research files, and generated run folders are ignored by Git and should not be committed.
+Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, generated topic research files, generated series folders, generated batch summaries, and generated run folders are ignored by Git and should not be committed.
 
-External trend data, YouTube search, analytics, performance feedback, scheduling, and automatic batch generation are future milestones.
+External trend data, YouTube search, analytics, performance feedback, scheduling, and automatic publishing are future milestones.
 
 ## Logging Behavior
 
