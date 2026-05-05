@@ -195,6 +195,8 @@ python main.py --mode series-plan \
   --target-duration-seconds 150
 ```
 
+`series-plan` is intended to create episode-ready story plans, not just file structure. It writes a series bible, full story arc, episode plan, and chapter source files with hooks, story jobs, evidence focus, avoid-repeating notes, factual guardrails, and ending teases for 2-3 minute mystery/history episodes. Generated factual plans should still be reviewed before `batch-series`, especially when the topic includes disputed records, later retellings, uncertain causes, death counts, or folklore.
+
 Generate selected episodes from a saved series plan:
 
 ```bash
