@@ -73,6 +73,7 @@ def _validate_series_plan(series_plan):
         "what_is_known",
         "what_is_uncertain",
         "what_not_to_claim",
+        "source_sensitivity_notes",
         "key_people_or_groups",
         "timeline",
         "episode_plan",
@@ -89,7 +90,19 @@ def _validate_series_plan(series_plan):
     episode_required_fields = [
         "episode_number",
         "title",
+        "episode_topic",
+        "hook",
         "chapter_summary",
+        "key_beats",
+        "continuity_from_previous",
+        "ending_tease",
+        "next_episode_setup",
+        "suggested_template",
+        "suggested_image_count",
+        "suggested_thumbnail_angle",
+        "suggested_video_format",
+        "evidence_focus",
+        "avoid_repeating",
     ]
 
     for episode in episode_plan:
@@ -116,9 +129,16 @@ def _validate_series_plan(series_plan):
             )
 
         try:
-            int(episode["episode_number"])
+            episode["episode_number"] = int(episode["episode_number"])
         except (TypeError, ValueError) as exc:
             raise ValueError("Episode plan item episode_number must be an integer") from exc
+
+        for list_field in ["key_beats", "evidence_focus", "avoid_repeating"]:
+            if not isinstance(episode.get(list_field), list):
+                episode_number = episode.get("episode_number", "unknown")
+                raise ValueError(
+                    f"Episode plan item {episode_number} {list_field} must be a list"
+                )
 
         if episode.get("suggested_template") not in VALID_TEMPLATES:
             raise ValueError(
@@ -156,11 +176,29 @@ def _normalize_image_count(value):
     return image_count if image_count > 0 else DEFAULT_SUGGESTED_IMAGE_COUNT
 
 
+def _normalize_list(value, default_item=None):
+    if isinstance(value, list):
+        return value
+    if value is None or value == "":
+        return [default_item] if default_item else []
+    return [str(value)]
+
+
 def _normalize_video_format(value):
     video_format = str(value or "").strip().lower()
     if video_format in VALID_VIDEO_FORMATS:
         return video_format
     return DEFAULT_SUGGESTED_VIDEO_FORMAT
+
+
+def _normalize_series_plan(series_plan):
+    series_plan.setdefault(
+        "source_sensitivity_notes",
+        [
+            "Review dates, names, locations, evidence descriptions, and theories before production.",
+        ],
+    )
+    return _normalize_episode_defaults(series_plan)
 
 
 def _normalize_episode_defaults(series_plan):
@@ -181,16 +219,23 @@ def _normalize_episode_defaults(series_plan):
         if not episode.get("episode_topic"):
             episode["episode_topic"] = episode.get("title", "")
 
-        for optional_field in [
-            "hook",
-            "key_beats",
-            "continuity_from_previous",
-            "ending_tease",
-            "next_episode_setup",
-            "suggested_thumbnail_angle",
-        ]:
-            default_value = [] if optional_field == "key_beats" else ""
-            episode.setdefault(optional_field, default_value)
+        try:
+            episode["episode_number"] = int(episode["episode_number"])
+        except (KeyError, TypeError, ValueError):
+            pass
+
+        episode["key_beats"] = _normalize_list(episode.get("key_beats"))
+        episode["evidence_focus"] = _normalize_list(
+            episode.get("evidence_focus"),
+            "No concrete evidence specified; treat this episode as interpretive and avoid overclaiming.",
+        )
+        episode["avoid_repeating"] = _normalize_list(episode.get("avoid_repeating"))
+
+        episode.setdefault("hook", "")
+        episode.setdefault("continuity_from_previous", "")
+        episode.setdefault("ending_tease", "")
+        episode.setdefault("next_episode_setup", "")
+        episode.setdefault("suggested_thumbnail_angle", "")
 
     return series_plan
 
@@ -218,10 +263,21 @@ def create_series_plan(
                 "content": (
                     "You create factual edutainment series plans for weird history, "
                     "mysteries, scary factual stories, dark history, strange historical "
-                    "events, and eerie true stories. Be cinematic and compelling, but "
-                    "factual accuracy is more important than drama. Do not invent dates, "
-                    "ship launches, names, people, locations, discoveries, timelines, or "
-                    "events. If a detail is uncertain, phrase it as uncertain or omit it. "
+                    "events, and eerie true stories. Create a factual mystery/history "
+                    "series bible, a clear chaptered story, and episode plans that are "
+                    "specific, dramatic, and useful for batch video generation. The source "
+                    "material must be factual-edutainment, not fictional horror. Factual "
+                    "accuracy is more important than drama. Do not invent dates, launch "
+                    "years, names, people, locations, cargo, evidence, quotes, documents, "
+                    "official findings, discoveries, timelines, or events. If a detail is "
+                    "uncertain, phrase it as uncertain or omit it. If a famous legend "
+                    "detail is disputed, exaggerated, or from later retellings, label it "
+                    "that way or avoid it. Do not use fake expert interviews or imply "
+                    "interviews or sources exist unless actual named sources are available "
+                    "in the provided topic context. Do not use phrases like experts say "
+                    "unless the plan identifies what kind of evidence supports the point. "
+                    "Do not use generic filler like expert opinions unless specific "
+                    "evidence or inquiry records are being discussed. "
                     "Do not present supernatural, alien, or paranormal theories as serious "
                     "explanations unless the requested topic is explicitly a legend or myth. "
                     "For factual cases, supernatural theories may be mentioned only as "
@@ -239,8 +295,11 @@ def create_series_plan(
                     "Return one JSON object with these top-level fields:\n"
                     "series_title, topic, audience, target_duration_seconds, "
                     "episode_count, tone, factual_guardrails, what_is_known, "
-                    "what_is_uncertain, what_not_to_claim, key_people_or_groups, "
-                    "timeline, episode_plan.\n\n"
+                    "what_is_uncertain, what_not_to_claim, source_sensitivity_notes, "
+                    "key_people_or_groups, timeline, episode_plan.\n\n"
+                    "source_sensitivity_notes must describe facts that need careful "
+                    "wording, claims often exaggerated in retellings, theories that should "
+                    "be framed as speculation, and details that should not be overstated.\n\n"
                     "For historical mysteries, what_is_known, what_is_uncertain, and "
                     "what_not_to_claim are mandatory quality guardrails. Use them to "
                     "separate documented facts from speculation. Do not guess exact dates "
@@ -254,18 +313,56 @@ def create_series_plan(
                     "title, episode_topic, hook, chapter_summary, key_beats, "
                     "continuity_from_previous, ending_tease, next_episode_setup, "
                     "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
-                    "suggested_video_format.\n\n"
+                    "suggested_video_format, evidence_focus, avoid_repeating.\n\n"
+                    "evidence_focus must be a list of concrete evidence, known facts, "
+                    "documents, locations, artifacts, or observations the episode should "
+                    "use, such as last log entry, missing boat, cargo condition, official "
+                    "inquiry, weather reports, witness report, location of discovery, or "
+                    "timeline gap. If there is no concrete evidence, say the episode is "
+                    "interpretive or reflective and identify what it should avoid "
+                    "overstating. avoid_repeating must list what this episode should not "
+                    "repeat from earlier episodes.\n\n"
                     "Episode planning style:\n"
+                    "- Every episode must have a distinct job in the series.\n"
+                    "- For a 5-episode factual mystery, prefer this structure unless the "
+                    "topic demands otherwise: Episode 1 strongest hook/discovery/central "
+                    "mystery; Episode 2 backstory and timeline leading up to the mystery; "
+                    "Episode 3 main evidence and contradictions; Episode 4 theories and "
+                    "what each theory fails to explain; Episode 5 legacy, most likely "
+                    "explanation, and what remains unknown.\n"
                     "- Episode titles must be specific, clickable, and grounded in the case.\n"
+                    "- Avoid generic titles like The Theories, The Clues, The Enduring "
+                    "Mystery, or Life Aboard.\n"
+                    "- Prefer concrete titles like The Lighthouse Went Silent, The Last "
+                    "Logbook, The Empty Ship Found Drifting, The Search That Found Nothing, "
+                    "or The Theory That Almost Fits, but do not overclaim.\n"
+                    "- Hooks must be one or two strong sentences that open with a concrete "
+                    "mystery, fact, clue, contradiction, or disappearance. Avoid generic "
+                    "hooks like What happened, The mystery remains, or Why does this still "
+                    "haunt history.\n"
                     "- Episode 1 must begin with the strongest mystery hook, not slow background.\n"
                     "- Each episode must have a clear mini-arc: hook, setup, escalation, "
                     "reveal or turn, ending tease.\n"
                     "- Avoid generic phrases and awkward wording such as capturing event.\n"
+                    "- Avoid risky overstatements such as perfect condition unless the "
+                    "available evidence supports that exact wording.\n"
                     "- Avoid repeating previous episodes.\n"
                     "- Each episode should naturally set up the next.\n"
-                    "- Chapter summaries must be detailed source material for episode "
-                    "generation, not final scripts. Include concrete facts, uncertainties, "
-                    "turning points, and guardrails for what not to overclaim.\n\n"
+                    "- Chapter summaries must be 120-220 words each, with no markdown "
+                    "inside JSON. They must be detailed source material, not final narration "
+                    "scripts. Include the episode mini-arc, what the viewer learns, concrete "
+                    "facts, uncertainties, turning points, what not to overclaim, and how "
+                    "the episode connects to the next.\n"
+                    "- key_beats must include 5-8 specific beats per episode. Avoid generic "
+                    "beats like Introduction, Discussion, Expert analysis, or Final thoughts. "
+                    "Use concrete beats that can become scenes.\n"
+                    "- ending_tease must set up the next episode specifically. Avoid vague "
+                    "teases like The legend continues, The mystery remains, or What happened "
+                    "next. Prefer concrete teases such as But the strangest clue was not what "
+                    "was missing - it was what was written in the final log, or The search "
+                    "should have answered everything. Instead, it made the timeline harder "
+                    "to explain.\n"
+                    "- next_episode_setup must clearly name what the next episode investigates.\n\n"
                     "suggested_template must be exactly one of: default, bold, minimal, ai. "
                     "Use ai or bold for most mystery/history episodes. Do not output custom "
                     "template names such as mystery_build-up or tension_build-up. "
@@ -279,7 +376,7 @@ def create_series_plan(
 
     content = response.choices[0].message.content
     series_plan = _extract_json(content)
-    series_plan = _normalize_episode_defaults(series_plan)
+    series_plan = _normalize_series_plan(series_plan)
     _validate_series_plan(series_plan)
     return series_plan
 
@@ -312,6 +409,9 @@ def _write_full_story(series_plan, full_story_path):
         "## What Not To Claim",
         _markdown_list(series_plan.get("what_not_to_claim")),
         "",
+        "## Source Sensitivity Notes",
+        _markdown_list(series_plan.get("source_sensitivity_notes")),
+        "",
         "## Timeline",
         _markdown_list(series_plan.get("timeline")),
         "",
@@ -328,6 +428,12 @@ def _write_full_story(series_plan, full_story_path):
                 "",
                 "Key beats:",
                 _markdown_list(episode.get("key_beats")),
+                "",
+                "Evidence focus:",
+                _markdown_list(episode.get("evidence_focus")),
+                "",
+                "Avoid repeating:",
+                _markdown_list(episode.get("avoid_repeating")),
                 "",
                 f"Ending tease: {episode.get('ending_tease', '')}",
             ]
@@ -361,6 +467,12 @@ def _write_chapter(series_plan, episode, chapter_path):
         "## Key Beats",
         _markdown_list(episode.get("key_beats")),
         "",
+        "## Evidence Focus",
+        _markdown_list(episode.get("evidence_focus")),
+        "",
+        "## Avoid Repeating",
+        _markdown_list(episode.get("avoid_repeating")),
+        "",
         "## Continuity From Previous",
         str(episode.get("continuity_from_previous", "")).strip(),
         "",
@@ -373,6 +485,9 @@ def _write_chapter(series_plan, episode, chapter_path):
         "## Factual Guardrails",
         _markdown_list(series_plan.get("factual_guardrails")),
         "",
+        "## Source Sensitivity Notes",
+        _markdown_list(series_plan.get("source_sensitivity_notes")),
+        "",
         "## What Not To Claim",
         _markdown_list(series_plan.get("what_not_to_claim")),
     ]
@@ -381,6 +496,7 @@ def _write_chapter(series_plan, episode, chapter_path):
 
 
 def save_series_plan(series_plan, output_name=None):
+    series_plan = _normalize_series_plan(series_plan)
     _validate_series_plan(series_plan)
     SERIES_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
