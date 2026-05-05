@@ -1,0 +1,126 @@
+import unittest
+
+from tools.series_planner import (
+    DEFAULT_SUGGESTED_IMAGE_COUNT,
+    DEFAULT_SUGGESTED_VIDEO_FORMAT,
+    _normalize_series_plan,
+    _validate_series_plan,
+)
+
+
+def _base_plan(episode):
+    return {
+        "series_title": "The Flannan Isles Lighthouse Mystery",
+        "topic": "Flannan Isles Lighthouse Mystery",
+        "audience": "mystery viewers",
+        "target_duration_seconds": 150,
+        "episode_count": 1,
+        "tone": "careful and eerie",
+        "factual_guardrails": ["Do not invent evidence."],
+        "what_is_known": ["Three lighthouse keepers disappeared in December 1900."],
+        "what_is_uncertain": ["The exact sequence of events is unknown."],
+        "what_not_to_claim": ["Do not claim unsupported notes or vessels existed."],
+        "source_sensitivity_notes": [
+            "Later retellings exaggerate some details; keep claims qualified.",
+        ],
+        "key_people_or_groups": ["The lighthouse keepers"],
+        "timeline": ["December 1900: the keepers were found missing."],
+        "episode_plan": [episode],
+    }
+
+
+def _base_episode(**overrides):
+    episode = {
+        "episode_number": 1,
+        "title": "The Lighthouse Went Silent",
+        "episode_topic": "The disappearance at the Flannan Isles lighthouse",
+        "hook": "Three keepers vanished from a remote lighthouse.",
+        "chapter_summary": (
+            "The episode stays with the documented disappearance and uses careful "
+            "wording around what the record can prove."
+        ),
+        "key_beats": [
+            "The relief party reaches the lighthouse.",
+            "The keepers are missing.",
+            "The record leaves key questions unresolved.",
+            "Later retellings add unsupported drama.",
+            "The case moves into competing explanations.",
+        ],
+        "continuity_from_previous": "",
+        "ending_tease": "The next episode follows the timeline before the disappearance.",
+        "next_episode_setup": "The timeline before the keepers vanished.",
+        "suggested_template": "ai",
+        "suggested_image_count": 12,
+        "suggested_thumbnail_angle": "Remote lighthouse exterior",
+        "suggested_video_format": "landscape",
+        "evidence_focus": ["The missing keepers", "The lighthouse location"],
+        "avoid_repeating": [],
+    }
+    episode.update(overrides)
+    return episode
+
+
+class SeriesPlannerSanityTests(unittest.TestCase):
+    def test_flannan_empty_ship_episode_is_normalized(self):
+        plan = _base_plan(
+            _base_episode(
+                title="The Empty Ship Found Drifting",
+                episode_topic="The documented lighthouse disappearance",
+                chapter_summary=(
+                    "Joseph Moore found cryptic notes inside a perfectly untouched "
+                    "lighthouse after an empty ship appeared nearby."
+                ),
+                ending_tease="Next, the cryptic notes reveal another clue.",
+                evidence_focus=[
+                    "empty ship",
+                    "drifting vessel",
+                    "lifeboat",
+                    "expert opinions",
+                    "The lighthouse location",
+                ],
+                suggested_template="mystery_build-up",
+                suggested_image_count=None,
+                suggested_video_format=None,
+            )
+        )
+
+        normalized = _normalize_series_plan(plan)
+        episode = normalized["episode_plan"][0]
+
+        self.assertEqual(episode["title"], "The documented lighthouse disappearance")
+        self.assertEqual(episode["evidence_focus"], ["The lighthouse location"])
+        self.assertNotIn("cryptic notes", episode["chapter_summary"].lower())
+        self.assertNotIn("cryptic notes", episode["ending_tease"].lower())
+        self.assertIn("no obvious signs of violence", episode["chapter_summary"])
+        _validate_series_plan(normalized)
+
+    def test_invalid_template_defaults_to_ai(self):
+        plan = _base_plan(_base_episode(suggested_template="custom-template"))
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertEqual(normalized["episode_plan"][0]["suggested_template"], "ai")
+
+    def test_missing_image_count_defaults_to_12(self):
+        plan = _base_plan(_base_episode(suggested_image_count=None))
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertEqual(
+            normalized["episode_plan"][0]["suggested_image_count"],
+            DEFAULT_SUGGESTED_IMAGE_COUNT,
+        )
+
+    def test_missing_video_format_defaults_to_landscape(self):
+        plan = _base_plan(_base_episode(suggested_video_format=None))
+
+        normalized = _normalize_series_plan(plan)
+
+        self.assertEqual(
+            normalized["episode_plan"][0]["suggested_video_format"],
+            DEFAULT_SUGGESTED_VIDEO_FORMAT,
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -16,6 +16,63 @@ VALID_VIDEO_FORMATS = {"landscape", "vertical"}
 DEFAULT_SUGGESTED_TEMPLATE = "ai"
 DEFAULT_SUGGESTED_IMAGE_COUNT = 12
 DEFAULT_SUGGESTED_VIDEO_FORMAT = "landscape"
+GENERIC_EVIDENCE_TERMS = {
+    "expert opinions",
+    "interviews",
+    "unnamed sources",
+}
+SUSPICIOUS_TOPIC_TERMS = {
+    "cryptic notes",
+    "empty ship",
+    "drifting vessel",
+    "adrift ship",
+    "driftwood boat",
+    "lifeboat",
+}
+SHIP_MISMATCH_TERMS = {
+    "empty ship",
+    "ghost ship",
+    "drifting vessel",
+    "adrift ship",
+    "driftwood boat",
+    "lifeboat",
+}
+SHIP_TITLE_WORDS = {
+    "ship",
+    "ships",
+    "vessel",
+    "vessels",
+    "boat",
+    "boats",
+    "lifeboat",
+    "lifeboats",
+    "schooner",
+    "brigantine",
+}
+LIGHTHOUSE_TITLE_WORDS = {
+    "lighthouse",
+    "lighthouses",
+    "keeper",
+    "keepers",
+    "logbook",
+    "logbooks",
+}
+DISPUTED_QUALIFIERS = {
+    "disputed",
+    "folklore",
+    "legend",
+    "later retelling",
+    "later retellings",
+    "unverified",
+    "unsupported",
+    "claimed",
+    "alleged",
+}
+OVERSTATEMENT_REPLACEMENTS = {
+    "perfectly untouched": "with no obvious signs of violence",
+    "no one can explain": "the official record does not fully explain",
+    "experts agree": "some interpretations suggest",
+}
 
 
 def _get_client() -> OpenAI:
@@ -154,6 +211,8 @@ def _validate_series_plan(series_plan):
                 "Episode plan item suggested_video_format must be landscape or vertical"
             )
 
+    _validate_topic_containment(series_plan)
+
 
 def _normalize_template(value):
     template = str(value or "").strip().lower()
@@ -191,6 +250,203 @@ def _normalize_video_format(value):
     return DEFAULT_SUGGESTED_VIDEO_FORMAT
 
 
+def _contains_phrase(text, phrase):
+    return phrase in str(text or "").lower()
+
+
+def _contains_any_phrase(text, phrases):
+    normalized = str(text or "").lower()
+    return any(phrase in normalized for phrase in phrases)
+
+
+def _contains_any_word(text, words):
+    normalized = str(text or "").lower()
+    return any(re.search(rf"\b{re.escape(word)}\b", normalized) for word in words)
+
+
+def _topic_profile(series_plan):
+    topic_text = " ".join(
+        str(series_plan.get(field, ""))
+        for field in ["topic", "series_title"]
+    ).lower()
+    return {
+        "is_lighthouse_topic": _contains_any_word(
+            topic_text,
+            {
+                "lighthouse",
+                "lighthouses",
+                "flannan",
+                "keeper",
+                "keepers",
+            },
+        ),
+        "is_ship_topic": _contains_any_word(
+            topic_text,
+            {
+                "ship",
+                "ships",
+                "vessel",
+                "vessels",
+                "boat",
+                "boats",
+                "schooner",
+                "brigantine",
+                "mary",
+                "celeste",
+            },
+        ),
+    }
+
+
+def _has_disputed_qualifier(text):
+    return _contains_any_phrase(text, DISPUTED_QUALIFIERS)
+
+
+def _is_term_supported_or_disputed(series_plan, episode, term):
+    if _has_disputed_qualifier(episode.get("source_sensitivity_notes", "")):
+        return True
+
+    support_fields = [
+        series_plan.get("what_is_known", []),
+        series_plan.get("what_is_uncertain", []),
+        series_plan.get("source_sensitivity_notes", []),
+        episode.get("chapter_summary", ""),
+        episode.get("key_beats", []),
+    ]
+    for field in support_fields:
+        if isinstance(field, list):
+            values = field
+        else:
+            values = [field]
+        for value in values:
+            if _contains_phrase(value, term) and _has_disputed_qualifier(value):
+                return True
+
+    return False
+
+
+def _detail_is_mismatched_for_topic(text, profile):
+    if profile["is_lighthouse_topic"] and not profile["is_ship_topic"]:
+        return _contains_any_phrase(text, SHIP_MISMATCH_TERMS)
+    if profile["is_ship_topic"] and not profile["is_lighthouse_topic"]:
+        return _contains_any_word(text, LIGHTHOUSE_TITLE_WORDS)
+    return False
+
+
+def _title_is_mismatched_for_topic(title, profile):
+    if profile["is_lighthouse_topic"] and not profile["is_ship_topic"]:
+        return _contains_any_word(title, SHIP_TITLE_WORDS)
+    if profile["is_ship_topic"] and not profile["is_lighthouse_topic"]:
+        return _contains_any_word(title, LIGHTHOUSE_TITLE_WORDS)
+    return False
+
+
+def _sanitize_unsupported_claims(text, series_plan, episode, profile):
+    if not isinstance(text, str) or not text:
+        return text
+
+    sanitized = text
+    for overstatement, replacement in OVERSTATEMENT_REPLACEMENTS.items():
+        sanitized = re.sub(
+            re.escape(overstatement),
+            replacement,
+            sanitized,
+            flags=re.I,
+        )
+
+    for term in SUSPICIOUS_TOPIC_TERMS:
+        if not _contains_phrase(sanitized, term):
+            continue
+        if _detail_is_mismatched_for_topic(sanitized, profile):
+            sanitized = re.sub(
+                re.escape(term),
+                "an unsupported detail from another case",
+                sanitized,
+                flags=re.I,
+            )
+            continue
+        if not _is_term_supported_or_disputed(series_plan, episode, term):
+            sanitized = re.sub(
+                re.escape(term),
+                "a disputed or unsupported detail",
+                sanitized,
+                flags=re.I,
+            )
+
+    return sanitized
+
+
+def _normalize_evidence_focus(series_plan, episode, profile):
+    normalized_evidence = []
+    for item in episode.get("evidence_focus", []):
+        evidence_item = str(item).strip()
+        if not evidence_item:
+            continue
+
+        evidence_lower = evidence_item.lower()
+        if any(term in evidence_lower for term in GENERIC_EVIDENCE_TERMS):
+            continue
+
+        if _detail_is_mismatched_for_topic(evidence_item, profile):
+            continue
+
+        should_drop = False
+        for term in SUSPICIOUS_TOPIC_TERMS:
+            if term not in evidence_lower:
+                continue
+            if _is_term_supported_or_disputed(series_plan, episode, term):
+                if not _has_disputed_qualifier(evidence_item):
+                    evidence_item = f"Disputed folklore: {evidence_item}"
+                continue
+            should_drop = True
+            break
+
+        if not should_drop:
+            normalized_evidence.append(evidence_item)
+
+    if normalized_evidence:
+        return normalized_evidence
+
+    return [
+        "No concrete topic-relevant evidence specified; treat this episode as interpretive and avoid overclaiming.",
+    ]
+
+
+def _normalize_episode_topic_containment(series_plan):
+    profile = _topic_profile(series_plan)
+    for episode in series_plan.get("episode_plan", []):
+        if not isinstance(episode, dict):
+            continue
+
+        if _title_is_mismatched_for_topic(episode.get("title", ""), profile):
+            fallback_title = episode.get("episode_topic", "")
+            if not _title_is_mismatched_for_topic(fallback_title, profile):
+                episode["title"] = fallback_title
+            else:
+                episode_number = episode.get("episode_number", "")
+                episode["title"] = f"Episode {episode_number}: Evidence and Timeline".strip()
+
+        episode["evidence_focus"] = _normalize_evidence_focus(
+            series_plan,
+            episode,
+            profile,
+        )
+        episode["chapter_summary"] = _sanitize_unsupported_claims(
+            episode.get("chapter_summary", ""),
+            series_plan,
+            episode,
+            profile,
+        )
+        episode["ending_tease"] = _sanitize_unsupported_claims(
+            episode.get("ending_tease", ""),
+            series_plan,
+            episode,
+            profile,
+        )
+
+    return series_plan
+
+
 def _normalize_series_plan(series_plan):
     series_plan.setdefault(
         "source_sensitivity_notes",
@@ -198,7 +454,24 @@ def _normalize_series_plan(series_plan):
             "Review dates, names, locations, evidence descriptions, and theories before production.",
         ],
     )
-    return _normalize_episode_defaults(series_plan)
+    series_plan = _normalize_episode_defaults(series_plan)
+    return _normalize_episode_topic_containment(series_plan)
+
+
+def _validate_topic_containment(series_plan):
+    profile = _topic_profile(series_plan)
+    for episode in series_plan.get("episode_plan", []):
+        episode_number = episode.get("episode_number", "unknown")
+        if _title_is_mismatched_for_topic(episode.get("title", ""), profile):
+            raise ValueError(
+                f"Episode plan item {episode_number} title appears unrelated to the requested topic"
+            )
+
+        for evidence_item in episode.get("evidence_focus", []):
+            if _detail_is_mismatched_for_topic(evidence_item, profile):
+                raise ValueError(
+                    f"Episode plan item {episode_number} evidence_focus contains topic-mismatched evidence"
+                )
 
 
 def _normalize_episode_defaults(series_plan):
@@ -278,6 +551,15 @@ def create_series_plan(
                     "unless the plan identifies what kind of evidence supports the point. "
                     "Do not use generic filler like expert opinions unless specific "
                     "evidence or inquiry records are being discussed. "
+                    "Every episode must stay directly tied to the requested topic. Do not "
+                    "borrow details from other famous mysteries. Do not insert ghost ship "
+                    "details into lighthouse cases, and do not insert lighthouse details "
+                    "into ship cases. Do not invent boats, ships, lifeboats, notes, "
+                    "letters, documents, interviews, witnesses, artifacts, or official "
+                    "findings unless the requested topic specifically supports them. If "
+                    "you are unsure whether a detail belongs to this topic, omit it or "
+                    "label it as disputed folklore. Do not use generic mystery tropes as "
+                    "evidence. evidence_focus must contain only topic-relevant evidence. "
                     "Do not present supernatural, alien, or paranormal theories as serious "
                     "explanations unless the requested topic is explicitly a legend or myth. "
                     "For factual cases, supernatural theories may be mentioned only as "
@@ -308,6 +590,13 @@ def create_series_plan(
                     "If the topic is Mary Celeste, the factual background is that the "
                     "ship was built/launched in 1861 as the Amazon and later renamed "
                     "Mary Celeste; do not claim it launched in 1830.\n\n"
+                    "Topic-containment warning examples:\n"
+                    "- For Flannan Isles, do not invent an empty ship, drifting vessel, "
+                    "lifeboat, driftwood boat, or cryptic notes.\n"
+                    "- For Mary Celeste, do not invent lighthouse logs or lighthouse keepers.\n"
+                    "- For Roanoke, do not invent shipboard evidence or lighthouse evidence.\n"
+                    "These examples are guardrails only; apply the same containment rule "
+                    "to any requested topic.\n\n"
                     "episode_plan must be a list with exactly the requested number of "
                     "episode objects. Each episode object must include: episode_number, "
                     "title, episode_topic, hook, chapter_summary, key_beats, "
@@ -320,7 +609,11 @@ def create_series_plan(
                     "inquiry, weather reports, witness report, location of discovery, or "
                     "timeline gap. If there is no concrete evidence, say the episode is "
                     "interpretive or reflective and identify what it should avoid "
-                    "overstating. avoid_repeating must list what this episode should not "
+                    "overstating. Do not list generic or fake-source evidence such as "
+                    "expert opinions, interviews, unnamed sources, cryptic notes, empty "
+                    "ships, drifting vessels, or lifeboats unless they are specifically "
+                    "supported by the requested topic; if they are only legend material, "
+                    "label them as disputed folklore. avoid_repeating must list what this episode should not "
                     "repeat from earlier episodes.\n\n"
                     "Episode planning style:\n"
                     "- Every episode must have a distinct job in the series.\n"
@@ -331,11 +624,16 @@ def create_series_plan(
                     "what each theory fails to explain; Episode 5 legacy, most likely "
                     "explanation, and what remains unknown.\n"
                     "- Episode titles must be specific, clickable, and grounded in the case.\n"
+                    "- If the topic is about a lighthouse, titles must not reference ships "
+                    "unless the actual topic includes a ship. If the topic is about a ship, "
+                    "titles must not reference lighthouses unless the actual topic includes "
+                    "a lighthouse.\n"
                     "- Avoid generic titles like The Theories, The Clues, The Enduring "
                     "Mystery, or Life Aboard.\n"
                     "- Prefer concrete titles like The Lighthouse Went Silent, The Last "
-                    "Logbook, The Empty Ship Found Drifting, The Search That Found Nothing, "
-                    "or The Theory That Almost Fits, but do not overclaim.\n"
+                    "Logbook, The Search That Found Nothing, or The Theory That Almost "
+                    "Fits, but do not overclaim. Use ship-specific titles such as The "
+                    "Empty Ship Found Drifting only for actual ship cases.\n"
                     "- Hooks must be one or two strong sentences that open with a concrete "
                     "mystery, fact, clue, contradiction, or disappearance. Avoid generic "
                     "hooks like What happened, The mystery remains, or Why does this still "
@@ -346,6 +644,11 @@ def create_series_plan(
                     "- Avoid generic phrases and awkward wording such as capturing event.\n"
                     "- Avoid risky overstatements such as perfect condition unless the "
                     "available evidence supports that exact wording.\n"
+                    "- Do not use phrases like perfectly untouched, no one can explain, "
+                    "or experts agree unless carefully qualified. Prefer careful wording "
+                    "such as no obvious signs of violence, later retellings exaggerated "
+                    "this detail, one possible explanation, or the official record does "
+                    "not prove.\n"
                     "- Avoid repeating previous episodes.\n"
                     "- Each episode should naturally set up the next.\n"
                     "- Chapter summaries must be 120-220 words each, with no markdown "
@@ -358,10 +661,10 @@ def create_series_plan(
                     "Use concrete beats that can become scenes.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
                     "teases like The legend continues, The mystery remains, or What happened "
-                    "next. Prefer concrete teases such as But the strangest clue was not what "
-                    "was missing - it was what was written in the final log, or The search "
-                    "should have answered everything. Instead, it made the timeline harder "
-                    "to explain.\n"
+                    "next. Do not use unsupported claims such as cryptic notes unless the "
+                    "episode establishes them as real or disputed. Prefer concrete teases "
+                    "such as The search should have answered everything. Instead, it made "
+                    "the timeline harder to explain.\n"
                     "- next_episode_setup must clearly name what the next episode investigates.\n\n"
                     "suggested_template must be exactly one of: default, bold, minimal, ai. "
                     "Use ai or bold for most mystery/history episodes. Do not output custom "
