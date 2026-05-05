@@ -44,13 +44,22 @@ DEFAULT_SERIES_NARRATIVE_ARC = (
     "what the record can and cannot resolve."
 )
 GENERIC_EVIDENCE_TERMS = {
+    "letters",
+    "documents",
+    "expert commentary",
     "expert opinions",
+    "historical sources",
     "interviews",
-    "unnamed sources",
-    "scholarly articles",
-    "psychological studies",
-    "historical documents",
     "medical records",
+    "modern theories",
+    "official sentiment",
+    "personal accounts",
+    "historical documents",
+    "psychological studies",
+    "recorded statements",
+    "scholarly articles",
+    "testimonies",
+    "unnamed sources",
 }
 GENERIC_TITLE_PHRASES = {
     "the beginning",
@@ -364,6 +373,14 @@ def _default_story_job(episode_number, episode_count):
     return "Advance the serialized story with new evidence, context, or tension."
 
 
+def _default_final_closing_thought(series_plan):
+    topic = str(series_plan.get("topic") or "the mystery").strip()
+    return (
+        f"The records can narrow what people feared about {topic}. They still cannot "
+        "fully tell us what happened inside the moment when the mystery began."
+    )
+
+
 def _topic_profile(series_plan):
     topic_text = " ".join(
         str(series_plan.get(field, ""))
@@ -673,6 +690,12 @@ def _normalize_episode_defaults(series_plan):
         episode.setdefault("next_episode_setup", "")
         episode.setdefault("suggested_thumbnail_angle", "")
 
+        if episode_count and episode_number == episode_count:
+            episode["final_closing_thought"] = str(
+                episode.get("final_closing_thought")
+                or _default_final_closing_thought(series_plan)
+            )
+
     return series_plan
 
 
@@ -738,7 +761,13 @@ def create_series_plan(
                     "findings unless the requested topic specifically supports them. If "
                     "you are unsure whether a detail belongs to this topic, omit it or "
                     "label it as disputed folklore. Do not use generic mystery tropes as "
-                    "evidence. evidence_focus must contain only topic-relevant evidence. "
+                    "evidence. Do not use fake-source-adjacent language such as expert "
+                    "commentary, experts say, official sentiment, recorded statements, "
+                    "interviews, or testimonies unless actual named or known sources are "
+                    "provided. Prefer safer phrasing such as later historians have argued, "
+                    "some interpretations suggest, contemporary records are limited, later "
+                    "accounts claim, or the evidence does not prove. evidence_focus must "
+                    "contain only topic-relevant evidence. "
                     "Do not present supernatural, alien, or paranormal theories as serious "
                     "explanations unless the requested topic is explicitly a legend or myth. "
                     "For factual cases, supernatural theories may be mentioned only as "
@@ -800,20 +829,25 @@ def create_series_plan(
                     "title, episode_topic, story_job, hook, chapter_summary, key_beats, "
                     "continuity_from_previous, ending_tease, next_episode_setup, "
                     "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
-                    "suggested_video_format, evidence_focus, avoid_repeating.\n\n"
+                    "suggested_video_format, evidence_focus, avoid_repeating. The final "
+                    "episode must also include final_closing_thought.\n\n"
                     "evidence_focus must be a list of concrete evidence, known facts, "
                     "documents, locations, artifacts, or observations the episode should "
                     "use. Make entries specific to the topic, such as city council response, "
                     "contemporary chronicle accounts, carefully qualified reported numbers, "
                     "religious beliefs around St. Vitus, famine, disease, or social stress "
-                    "context, later retellings versus documented claims, last log entry, "
-                    "cargo condition, official inquiry, weather reports, witness report, "
-                    "location of discovery, or timeline gap. If there is no concrete evidence, say the episode is "
+                    "context, later summaries of physician recommendations clearly framed, "
+                    "disputed reports about dancer numbers and outcomes, later retellings "
+                    "versus documented claims, last log entry, cargo condition, official "
+                    "inquiry, weather reports, witness report, location of discovery, or "
+                    "timeline gap. If there is no concrete evidence, say the episode is "
                     "interpretive or reflective and identify what it should avoid "
                     "overstating. Do not list generic or fake-source evidence such as "
                     "scholarly articles, expert opinions, psychological studies, interviews, "
-                    "historical documents, medical records, unnamed sources, cryptic notes, "
-                    "empty ships, drifting vessels, or lifeboats unless they are specifically "
+                    "expert commentary, modern theories, personal accounts, official sentiment, "
+                    "letters, documents, historical sources, historical documents, medical "
+                    "records, unnamed sources, cryptic notes, empty ships, drifting vessels, "
+                    "or lifeboats unless they are specifically "
                     "supported by the requested topic; if they are only legend material, "
                     "label them as disputed folklore. avoid_repeating must list specific "
                     "things this episode should not repeat from earlier episodes, such as "
@@ -852,10 +886,14 @@ def create_series_plan(
                     "City Under Pressure, What the Records Actually Say, The Theory That "
                     "Almost Fits, What Still Doesn't Add Up, The Lighthouse Went Silent, "
                     "The Last Logbook, or The Search That Found Nothing, but do not overclaim.\n"
-                    "- Hooks must be one or two strong sentences that open with a concrete "
-                    "image, contradiction, discovery, or eerie fact. Avoid generic "
-                    "questions, This episode explores, In this episode we will, What really "
-                    "happened, The mystery remains, or Why does this still haunt history.\n"
+                    "- Hooks must be one or two strong sentences that open with a concrete, "
+                    "scene-based image, contradiction, discovery, or eerie fact. Bad hook: "
+                    "Imagine a town where people suddenly can't stop dancing. Better hook: "
+                    "In the summer of 1518, a woman stepped into a Strasbourg street and "
+                    "began to dance. Days later, she still had not stopped, and others "
+                    "were joining her. Avoid generic questions, This episode explores, "
+                    "In this episode we will, What really happened, The mystery remains, "
+                    "or Why does this still haunt history.\n"
                     "- Episode 1 must begin with the strongest mystery hook, not slow background.\n"
                     "- Each episode must have a clear mini-arc: hook, setup, escalation, "
                     "reveal or turn, ending tease.\n"
@@ -880,8 +918,13 @@ def create_series_plan(
                     "when, The key turn comes when, and By the end, the viewer understands.\n"
                     "- key_beats must include 6-9 specific scene-like story beats per episode. "
                     "Avoid generic beats like Introduction, Discussion, Expert analysis, "
-                    "Historical context, Final thoughts, or Compare theories. Use concrete "
-                    "beats that can become scenes.\n"
+                    "Historical context, Final thoughts, Compare theories, discussion of, "
+                    "examination of, reflection on, modern theories of, contemporary society, "
+                    "or expert commentary. Use concrete beats that can become scenes, such "
+                    "as The records narrow the story but refuse to close it, The most famous "
+                    "theory explains the pressure but not the first spark, Later folklore "
+                    "turns a civic crisis into a legend, or The final question shifts from "
+                    "what happened to why this story survived.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
                     "teases like What happened next, The mystery continues, More questions "
                     "remain, The legend continues, or The mystery remains. Do not use "
@@ -892,6 +935,16 @@ def create_series_plan(
                     "have to ask what the records actually say and what they leave out, or "
                     "The most famous explanation sounds convincing at first, until one detail "
                     "gets in the way.\n"
+                    "- The final episode does not need a next_episode_setup. Its ending_tease "
+                    "may be empty or null. But it must include final_closing_thought: one "
+                    "memorable, factual, eerie closing idea that names the unresolved core "
+                    "tension. Bad finale: The mystery continues to fascinate people today. "
+                    "Better finale: The records can tell us what Strasbourg feared. They "
+                    "still cannot tell us exactly what made the dancing begin.\n"
+                    "- The final episode must summarize what is known, identify the strongest "
+                    "explanation if appropriate, explain what remains unknown, avoid repeating "
+                    "all prior theories, avoid broad generic sociology language unless tied "
+                    "directly to the story, and end with a memorable factual line.\n"
                     "- The final episode must not end vaguely with The mystery remains, The "
                     "legend continues, We may never know, or The story still fascinates us "
                     "today. It must identify the core unresolved tension, such as what the "
@@ -988,6 +1041,8 @@ def _write_full_story(series_plan, full_story_path):
                 _markdown_list(episode.get("avoid_repeating")),
                 "",
                 f"Ending tease: {episode.get('ending_tease', '')}",
+                "",
+                f"Final closing thought: {episode.get('final_closing_thought', '')}",
             ]
         )
 
@@ -1036,6 +1091,9 @@ def _write_chapter(series_plan, episode, chapter_path):
         "",
         "## Next Episode Setup",
         str(episode.get("next_episode_setup", "")).strip(),
+        "",
+        "## Final Closing Thought",
+        str(episode.get("final_closing_thought", "")).strip(),
         "",
         "## Factual Guardrails",
         _markdown_list(series_plan.get("factual_guardrails")),
