@@ -16,6 +16,28 @@ VALID_VIDEO_FORMATS = {"landscape", "vertical"}
 DEFAULT_SUGGESTED_TEMPLATE = "ai"
 DEFAULT_SUGGESTED_IMAGE_COUNT = 12
 DEFAULT_SUGGESTED_VIDEO_FORMAT = "landscape"
+DEFAULT_AUDIENCE = "fans of weird history, mysteries, and eerie factual stories"
+DEFAULT_TARGET_DURATION_SECONDS = 150
+DEFAULT_SERIES_TONE = "eerie, factual, cinematic, and suspenseful"
+DEFAULT_FACTUAL_GUARDRAILS = [
+    "Use careful factual-edutainment framing and verify historical details during human review.",
+    "Frame uncertain or disputed details as uncertain, disputed, folklore, or later retellings.",
+    "Do not present unsupported claims, invented evidence, or speculation as established fact.",
+]
+DEFAULT_WHAT_IS_KNOWN = (
+    "Known details should be verified during human review. The plan should rely only on "
+    "topic-relevant historical information."
+)
+DEFAULT_WHAT_IS_UNCERTAIN = (
+    "Uncertain details should be framed as uncertain, disputed, or omitted."
+)
+DEFAULT_WHAT_NOT_TO_CLAIM = (
+    "Do not present unsupported claims, folklore, theories, invented evidence, or disputed "
+    "details as established fact."
+)
+DEFAULT_SOURCE_SENSITIVITY_NOTES = [
+    "Historical retellings may exaggerate details; review dates, names, locations, evidence descriptions, and theories before production.",
+]
 GENERIC_EVIDENCE_TERMS = {
     "expert opinions",
     "interviews",
@@ -133,7 +155,6 @@ def _validate_series_plan(series_plan):
         "source_sensitivity_notes",
         "key_people_or_groups",
         "timeline",
-        "episode_plan",
     ]
 
     missing = [field for field in required_fields if field not in series_plan]
@@ -248,6 +269,13 @@ def _normalize_video_format(value):
     if video_format in VALID_VIDEO_FORMATS:
         return video_format
     return DEFAULT_SUGGESTED_VIDEO_FORMAT
+
+
+def _set_default_if_missing(target, key, value):
+    if target.get(key) in [None, ""]:
+        if isinstance(value, list):
+            value = list(value)
+        target[key] = value
 
 
 def _contains_phrase(text, phrase):
@@ -447,13 +475,50 @@ def _normalize_episode_topic_containment(series_plan):
     return series_plan
 
 
-def _normalize_series_plan(series_plan):
-    series_plan.setdefault(
-        "source_sensitivity_notes",
-        [
-            "Review dates, names, locations, evidence descriptions, and theories before production.",
-        ],
+def _normalize_series_plan(
+    series_plan,
+    topic=None,
+    episodes=None,
+    target_duration_seconds=None,
+    audience=None,
+):
+    if not isinstance(series_plan, dict):
+        raise ValueError("Series plan must be a JSON object")
+
+    fallback_topic = topic or "Untitled Series"
+    fallback_episode_count = episodes
+    if fallback_episode_count is None and isinstance(
+        series_plan.get("episode_plan"),
+        list,
+    ):
+        fallback_episode_count = len(series_plan["episode_plan"])
+
+    _set_default_if_missing(
+        series_plan,
+        "series_title",
+        str(fallback_topic).strip() or "Untitled Series",
     )
+    _set_default_if_missing(series_plan, "topic", fallback_topic)
+    _set_default_if_missing(series_plan, "audience", audience or DEFAULT_AUDIENCE)
+    _set_default_if_missing(
+        series_plan,
+        "target_duration_seconds",
+        target_duration_seconds or DEFAULT_TARGET_DURATION_SECONDS,
+    )
+    _set_default_if_missing(series_plan, "episode_count", fallback_episode_count)
+    _set_default_if_missing(series_plan, "tone", DEFAULT_SERIES_TONE)
+    _set_default_if_missing(series_plan, "factual_guardrails", DEFAULT_FACTUAL_GUARDRAILS)
+    _set_default_if_missing(series_plan, "what_is_known", DEFAULT_WHAT_IS_KNOWN)
+    _set_default_if_missing(series_plan, "what_is_uncertain", DEFAULT_WHAT_IS_UNCERTAIN)
+    _set_default_if_missing(series_plan, "what_not_to_claim", DEFAULT_WHAT_NOT_TO_CLAIM)
+    _set_default_if_missing(
+        series_plan,
+        "source_sensitivity_notes",
+        DEFAULT_SOURCE_SENSITIVITY_NOTES,
+    )
+    _set_default_if_missing(series_plan, "key_people_or_groups", [])
+    _set_default_if_missing(series_plan, "timeline", [])
+
     series_plan = _normalize_episode_defaults(series_plan)
     return _normalize_episode_topic_containment(series_plan)
 
@@ -524,7 +589,7 @@ def create_series_plan(
     if target_duration_seconds <= 0:
         raise ValueError("target_duration_seconds must be greater than 0")
 
-    audience_text = audience or "fans of weird history, mysteries, and eerie factual stories"
+    audience_text = audience or DEFAULT_AUDIENCE
     client = _get_client()
 
     response = client.chat.completions.create(
@@ -579,6 +644,14 @@ def create_series_plan(
                     "episode_count, tone, factual_guardrails, what_is_known, "
                     "what_is_uncertain, what_not_to_claim, source_sensitivity_notes, "
                     "key_people_or_groups, timeline, episode_plan.\n\n"
+                    "Mandatory top-level factual guardrail fields:\n"
+                    "- what_is_known\n"
+                    "- what_is_uncertain\n"
+                    "- what_not_to_claim\n"
+                    "These three fields are required exactly as named. They must be "
+                    "top-level JSON keys. They must be strings or lists. Do not rename "
+                    "them. Do not put them only inside factual_guardrails. Do not omit "
+                    "them.\n\n"
                     "source_sensitivity_notes must describe facts that need careful "
                     "wording, claims often exaggerated in retellings, theories that should "
                     "be framed as speculation, and details that should not be overstated.\n\n"
@@ -679,7 +752,13 @@ def create_series_plan(
 
     content = response.choices[0].message.content
     series_plan = _extract_json(content)
-    series_plan = _normalize_series_plan(series_plan)
+    series_plan = _normalize_series_plan(
+        series_plan,
+        topic=topic,
+        episodes=episodes,
+        target_duration_seconds=target_duration_seconds,
+        audience=audience_text,
+    )
     _validate_series_plan(series_plan)
     return series_plan
 
