@@ -290,6 +290,9 @@ class SeriesPlannerSanityTests(unittest.TestCase):
                 evidence_focus=[
                     "scholarly articles",
                     "expert opinions",
+                    "expert commentary",
+                    "modern theories",
+                    "official sentiment",
                     "city council response",
                 ]
             )
@@ -302,6 +305,27 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             ["city council response"],
         )
         _validate_series_plan(normalized)
+
+    def test_final_episode_gets_closing_thought(self):
+        plan = _base_plan(_base_episode())
+        plan["episode_count"] = 5
+        plan["episode_plan"] = _episode_list(5)
+        plan["episode_plan"][-1]["final_closing_thought"] = None
+
+        normalized = _normalize_series_plan(
+            plan,
+            topic="The Dancing Plague of 1518",
+            episodes=5,
+            target_duration_seconds=150,
+            audience="fans of weird history and strange true stories",
+        )
+
+        self.assertNotIn("final_closing_thought", normalized["episode_plan"][0])
+        self.assertIn(
+            "records can narrow",
+            normalized["episode_plan"][-1]["final_closing_thought"],
+        )
+        _validate_series_plan(normalized, expected_episodes=5)
 
 
 if __name__ == "__main__":
