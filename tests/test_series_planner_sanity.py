@@ -60,6 +60,18 @@ def _base_episode(**overrides):
     return episode
 
 
+def _episode_list(count, **overrides):
+    episodes = []
+    for index in range(1, count + 1):
+        episode_overrides = {
+            "episode_number": index,
+            "title": f"The Lighthouse Went Silent Part {index}",
+        }
+        episode_overrides.update(overrides)
+        episodes.append(_base_episode(**episode_overrides))
+    return episodes
+
+
 class SeriesPlannerSanityTests(unittest.TestCase):
     def test_flannan_empty_ship_episode_is_normalized(self):
         plan = _base_plan(
@@ -123,6 +135,7 @@ class SeriesPlannerSanityTests(unittest.TestCase):
 
     def test_missing_top_level_guardrails_are_normalized(self):
         plan = _base_plan(_base_episode())
+        plan["episode_plan"] = _episode_list(5)
         del plan["what_is_known"]
         del plan["what_is_uncertain"]
         del plan["what_not_to_claim"]
@@ -160,7 +173,7 @@ class SeriesPlannerSanityTests(unittest.TestCase):
         self.assertTrue(normalized["source_sensitivity_notes"])
         self.assertEqual(normalized["key_people_or_groups"], [])
         self.assertEqual(normalized["timeline"], [])
-        _validate_series_plan(normalized)
+        _validate_series_plan(normalized, expected_episodes=5)
 
     def test_missing_episode_plan_still_fails_validation(self):
         plan = _base_plan(_base_episode())
@@ -179,6 +192,60 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             "Series plan episode_plan must be a non-empty list",
         ):
             _validate_series_plan(normalized)
+
+    def test_requested_episode_count_mismatch_fails_validation(self):
+        plan = _base_plan(_base_episode())
+        plan["episode_count"] = 5
+        plan["episode_plan"] = _episode_list(4)
+
+        normalized = _normalize_series_plan(
+            plan,
+            topic="The Dancing Plague of 1518",
+            episodes=5,
+            target_duration_seconds=150,
+            audience="fans of weird history and strange true stories",
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "Series plan expected 5 episodes but got 4",
+        ):
+            _validate_series_plan(normalized, expected_episodes=5)
+
+    def test_requested_episode_count_match_passes_validation(self):
+        plan = _base_plan(_base_episode())
+        plan["episode_count"] = 5
+        plan["episode_plan"] = _episode_list(5)
+
+        normalized = _normalize_series_plan(
+            plan,
+            topic="The Dancing Plague of 1518",
+            episodes=5,
+            target_duration_seconds=150,
+            audience="fans of weird history and strange true stories",
+        )
+
+        self.assertEqual(len(normalized["episode_plan"]), 5)
+        _validate_series_plan(normalized, expected_episodes=5)
+
+    def test_bad_episode_numbers_normalize_when_count_matches(self):
+        plan = _base_plan(_base_episode())
+        plan["episode_count"] = 5
+        plan["episode_plan"] = _episode_list(5, episode_number=None)
+
+        normalized = _normalize_series_plan(
+            plan,
+            topic="The Dancing Plague of 1518",
+            episodes=5,
+            target_duration_seconds=150,
+            audience="fans of weird history and strange true stories",
+        )
+
+        self.assertEqual(
+            [episode["episode_number"] for episode in normalized["episode_plan"]],
+            [1, 2, 3, 4, 5],
+        )
+        _validate_series_plan(normalized, expected_episodes=5)
 
 
 if __name__ == "__main__":
