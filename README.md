@@ -19,6 +19,7 @@ The pipeline currently supports these CLI modes:
 - `topic-research`: generates and ranks local OpenAI-based YouTube Shorts topic ideas.
 - `series-plan`: generates a reusable series bible, episode plan, full story, and chapter source files.
 - `batch-series`: generates selected episodes from a saved series plan using the existing full video pipeline.
+- `shorts-series-private-upload`: creates or uses a Shorts-focused series plan, generates each vertical Short, validates each organized run folder, and uploads each Short privately.
 - `upload-check`: validates an organized run folder before upload.
 - `upload`: uploads `video.mp4` from a validated organized run folder using `metadata.json`.
 
@@ -46,6 +47,7 @@ Common options:
 - `--series-folder`: points `batch-series` to a saved folder under `outputs/series/`.
 - `--episode`: generates one episode from a saved series plan.
 - `--episodes-range`: generates an inclusive episode range from a saved series plan, such as `1-5`.
+- `--continue-on-error`: keeps processing later Shorts in `shorts-series-private-upload` if one Short fails. Default behavior stops on the first error.
 
 The default topic is:
 
@@ -213,6 +215,50 @@ python main.py --mode batch-series \
 ```
 
 `batch-series` does not upload to YouTube by default and does not call the upload mode. It writes local assets, can organize each episode into a run folder, and runs `upload-check` only for organized run folders.
+
+Create and privately upload a complete 5-video Shorts series:
+
+```bash
+python main.py --mode shorts-series-private-upload --topic "The Lost Colony of Roanoke" --episodes 5
+```
+
+Use an existing series folder:
+
+```bash
+python main.py --mode shorts-series-private-upload --series-folder outputs/series/the-lost-colony-of-roanoke --episodes 5
+```
+
+`shorts-series-private-upload` is intentionally Shorts-only. Long-form private upload may be added later, but it is not part of this mode.
+
+Default settings:
+
+- `privacy_status`: `private`
+- `episodes`: `5`
+- `organize`: `true`
+- `template`: `ai`
+- `use_ai_images`: `true`
+- `image_count`: `7`
+- `generate_thumbnail`: `true`
+- `target_duration_seconds`: `75`
+- `video_format`: `vertical`
+- stop on the first error unless `--continue-on-error` is passed
+
+Behavior:
+
+- If `--series-folder` is provided, it uses that folder and does not create a new series plan.
+- If `--series-folder` is not provided, `--topic` is required and the mode creates a Shorts-focused series plan.
+- The generated plan is optimized for 5 connected short-form videos: immediate hooks, one focused mystery/history beat per Short, quick escalation, ending teases, and a short CTA.
+- Each Short is generated through the existing full generation pipeline.
+- Each run is organized into a timestamped folder under `outputs/runs/`.
+- `upload-check` runs before every upload. If it fails, the workflow stops before upload unless `--continue-on-error` is set.
+- Each ready Short uploads privately to YouTube through OAuth.
+- `thumbnail.png` is uploaded when it exists in the organized run folder. Missing thumbnails do not fail the upload.
+- Episode upload records are written under `outputs/series/<series-slug>/episodes/`.
+- A final batch summary is saved under `outputs/batches/`.
+
+This command can spend OpenAI, ElevenLabs, and YouTube API quota or credits for every Short in the series. The first YouTube upload may open the browser OAuth flow.
+
+Generated outputs, run folders, series folders, batch summaries, OAuth secrets, OAuth tokens, and `.env` must never be committed.
 
 Validate an organized run folder before upload:
 
@@ -513,6 +559,8 @@ Never commit:
 - any `client_secret*.json`, `credentials*.json`, or `token*.json` file
 - generated output files
 - generated run folders
+- generated series folders, except tracked `.gitkeep` files
+- generated batch summaries
 - local test log entries in `memory/logs.json`
 
 Credential and token files are ignored by Git, but still check staging before every commit.
@@ -553,7 +601,8 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 
 ## Current Limitations / Not Built Yet
 
-- No automatic thumbnail upload by default.
+- No general automatic thumbnail upload outside `shorts-series-private-upload` and explicit `--upload-thumbnail`.
+- No long-form one-command private upload yet.
 - No scheduling yet.
 - No stock footage search yet.
 - No external trend data or YouTube search yet.

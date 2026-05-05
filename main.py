@@ -15,6 +15,7 @@ from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
 from tools.series_planner import (
     create_series_plan,
+    create_shorts_series_plan,
     get_episode_source,
     load_series_plan,
     save_series_plan,
@@ -26,11 +27,16 @@ from tools.topic_research import research_topics, save_topic_research
 from tools.upload_check import validate_upload_package
 from tools.voiceover import generate_voiceover
 from tools.video_builder import build_video
-from tools.youtube_api import upload_video_from_run_folder
+from tools.youtube_api import (
+    upload_thumbnail_for_video,
+    upload_video_from_run_folder,
+)
 
 
 DEFAULT_TOPIC = "The strangest disappearance in history"
 DEFAULT_TARGET_DURATION_SECONDS = 150
+DEFAULT_SHORTS_TARGET_DURATION_SECONDS = 75
+DEFAULT_SHORTS_IMAGE_COUNT = 7
 DEFAULT_CAPTION_OFFSET = 1.2
 DEFAULT_WORDS_PER_CAPTION = 8
 DEFAULT_SECONDS_PER_CAPTION = 2.5
@@ -57,6 +63,7 @@ def parse_args():
             "topic-research",
             "series-plan",
             "batch-series",
+            "shorts-series-private-upload",
         ],
         default="full",
         help="Pipeline mode to run.",
@@ -197,6 +204,14 @@ def parse_args():
         "--episodes-range",
         help="Episode range to generate when --mode batch-series, for example 1-5.",
     )
+    parser.add_argument(
+        "--continue-on-error",
+        action="store_true",
+        help=(
+            "Continue later Shorts when one fails in "
+            "--mode shorts-series-private-upload."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -326,20 +341,21 @@ def _select_batch_episodes(args, episode_plan):
     return selected_episodes
 
 
-def _write_batch_summary(summary):
+def _write_batch_summary(summary, filename_kind="batch"):
     BATCH_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     series_slug = Path(summary["series_folder"]).name or "series"
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    summary_path = BATCH_OUTPUT_DIR / f"{series_slug}-batch-{timestamp}.json"
+    summary_path = BATCH_OUTPUT_DIR / f"{series_slug}-{filename_kind}-{timestamp}.json"
     summary_path.write_text(json.dumps(summary, indent=2) + "\n", encoding="utf-8")
     return str(summary_path)
 
 
-def _write_episode_record(series_folder, episode_source, result):
+def _write_episode_record(series_folder, episode_source, result, upload_result=None):
     episode_plan = episode_source["episode_plan"]
     episode_number = int(episode_plan["episode_number"])
     episodes_folder = Path(series_folder) / "episodes"
     episodes_folder.mkdir(parents=True, exist_ok=True)
+    upload_result = upload_result or {}
 
     record = {
         "episode_number": episode_number,
@@ -358,8 +374,18 @@ def _write_episode_record(series_folder, episode_source, result):
             if result.get("upload_check_result")
             else False
         ),
-        "youtube_video_id": None,
+        "youtube_video_id": upload_result.get("video_id"),
+        "youtube_video_url": upload_result.get("video_url"),
+        "thumbnail_uploaded": bool(upload_result.get("thumbnail_uploaded")),
+        "uploaded_at": upload_result.get("uploaded_at"),
+        "video_format": result.get("video_format"),
+        "target_duration_seconds": result.get("target_duration_seconds"),
     }
+
+    if upload_result.get("thumbnail_error"):
+        record["thumbnail_error"] = upload_result["thumbnail_error"]
+    if result.get("error"):
+        record["error"] = result["error"]
 
     record_path = episodes_folder / f"episode-{episode_number:02d}.json"
     record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
@@ -457,6 +483,56 @@ def generate_full_outputs(topic, script, args):
     return outputs
 
 
+def run_full_generation_pipeline(topic, script, args):
+    outputs = generate_full_outputs(topic, script, args)
+    run_folder = None
+    upload_check_result = None
+
+    if args.organize:
+        organize_result = organize_run_outputs(topic, outputs)
+        run_folder = organize_result["run_folder"]
+        outputs["run_folder"] = run_folder
+        outputs["copied_outputs"] = organize_result["copied_outputs"]
+
+        print("\nOrganized run folder:")
+        print(run_folder)
+
+        upload_check_result = validate_upload_package(run_folder)
+        outputs["upload_check_result"] = upload_check_result
+
+        print("\nUpload check result:")
+        print(json.dumps(upload_check_result, indent=2))
+
+    return outputs
+
+
+def run_private_upload_for_run_folder(run_folder, privacy_status="private"):
+    upload_result = upload_video_from_run_folder(
+        run_folder,
+        privacy_status=privacy_status or "private",
+        upload_thumbnail=False,
+    )
+    upload_result["thumbnail_uploaded"] = False
+    upload_result["uploaded_at"] = datetime.now().isoformat(timespec="seconds")
+
+    thumbnail_path = Path(run_folder) / "thumbnail.png"
+    if not thumbnail_path.exists():
+        return upload_result
+
+    try:
+        thumbnail_response = upload_thumbnail_for_video(
+            upload_result["video_id"],
+            thumbnail_path,
+        )
+        upload_result["thumbnail_uploaded"] = True
+        upload_result["thumbnail_path"] = str(thumbnail_path)
+        upload_result["thumbnail_response"] = thumbnail_response
+    except Exception as exc:
+        upload_result["thumbnail_error"] = str(exc)
+
+    return upload_result
+
+
 def run_batch_series(args):
     if not args.series_folder:
         raise ValueError("--series-folder is required when --mode batch-series")
@@ -487,24 +563,9 @@ def run_batch_series(args):
             print(f"\nGenerated episode {episode_number} script:")
             print(script)
 
-            outputs = generate_full_outputs(topic, script, args)
-            run_folder = None
-            upload_check_result = None
-
-            if args.organize:
-                organize_result = organize_run_outputs(topic, outputs)
-                run_folder = organize_result["run_folder"]
-                outputs["run_folder"] = run_folder
-                outputs["copied_outputs"] = organize_result["copied_outputs"]
-
-                print("\nOrganized run folder:")
-                print(run_folder)
-
-                upload_check_result = validate_upload_package(run_folder)
-                outputs["upload_check_result"] = upload_check_result
-
-                print("\nUpload check result:")
-                print(json.dumps(upload_check_result, indent=2))
+            outputs = run_full_generation_pipeline(topic, script, args)
+            run_folder = outputs.get("run_folder")
+            upload_check_result = outputs.get("upload_check_result")
 
             result = {
                 "episode_number": episode_number,
@@ -517,6 +578,8 @@ def run_batch_series(args):
                 "thumbnail_path": outputs.get("thumbnail"),
                 "run_folder": run_folder,
                 "upload_check_result": upload_check_result,
+                "video_format": args.video_format,
+                "target_duration_seconds": args.target_duration_seconds,
             }
             result["episode_record_path"] = _write_episode_record(
                 args.series_folder,
@@ -540,6 +603,198 @@ def run_batch_series(args):
 
     print("\nSaved batch summary path:")
     print(summary_path)
+
+
+def _configure_shorts_defaults(args):
+    args.organize = True
+    args.use_ai_images = True
+    args.generate_thumbnail = True
+
+    if args.template == "default":
+        args.template = "ai"
+    if args.image_count == 5:
+        args.image_count = DEFAULT_SHORTS_IMAGE_COUNT
+    if args.target_duration_seconds == DEFAULT_TARGET_DURATION_SECONDS:
+        args.target_duration_seconds = DEFAULT_SHORTS_TARGET_DURATION_SECONDS
+    if args.video_format == "landscape":
+        args.video_format = "vertical"
+    if not args.privacy_status:
+        args.privacy_status = "private"
+
+
+def _load_or_create_shorts_series(args):
+    if args.series_folder:
+        return args.series_folder
+
+    if not args.topic:
+        raise ValueError(
+            "--topic is required when --mode shorts-series-private-upload "
+            "unless --series-folder is provided"
+        )
+
+    series_plan = create_shorts_series_plan(
+        topic=args.topic,
+        episodes=args.episodes,
+        target_duration_seconds=args.target_duration_seconds,
+        audience=args.audience,
+    )
+    saved_paths = save_series_plan(series_plan)
+    print_series_plan_result(saved_paths)
+    return saved_paths["series_folder"]
+
+
+def _selected_shorts_episodes(series_folder, episode_count):
+    loaded_plan = load_series_plan(series_folder)
+    available_episodes = sorted(
+        int(episode["episode_number"]) for episode in loaded_plan["episode_plan"]
+    )
+    selected_episodes = available_episodes[:episode_count]
+
+    if len(selected_episodes) < episode_count:
+        raise ValueError(
+            f"Series folder has {len(selected_episodes)} episodes, "
+            f"but --episodes requested {episode_count}"
+        )
+
+    return selected_episodes
+
+
+def run_shorts_series_private_upload(args):
+    _configure_shorts_defaults(args)
+    series_folder = _load_or_create_shorts_series(args)
+    selected_episodes = _selected_shorts_episodes(series_folder, args.episodes)
+    loaded_plan = load_series_plan(series_folder)
+    topic = args.topic or loaded_plan["series_bible"].get("topic")
+    summary = {
+        "mode": "shorts-series-private-upload",
+        "topic": topic,
+        "series_folder": series_folder,
+        "episode_count": len(selected_episodes),
+        "privacy_status": args.privacy_status,
+        "video_format": args.video_format,
+        "target_duration_seconds": args.target_duration_seconds,
+        "image_count": args.image_count,
+        "started_at": datetime.now().isoformat(timespec="seconds"),
+        "completed_at": None,
+        "stop_on_error": not args.continue_on_error,
+        "episodes": [],
+    }
+
+    for episode_number in selected_episodes:
+        episode_source = None
+        episode_plan = None
+        result = {
+            "episode_number": episode_number,
+            "title": None,
+            "run_folder": None,
+            "upload_ready": False,
+            "video_id": None,
+            "video_url": None,
+            "thumbnail_uploaded": False,
+            "errors": [],
+        }
+
+        try:
+            episode_source = get_episode_source(series_folder, episode_number)
+            episode_plan = episode_source["episode_plan"]
+            result["title"] = _episode_title(episode_plan)
+            episode_topic = _episode_topic(episode_source["series_bible"], episode_plan)
+            script = generate_episode_script_from_chapter(
+                episode_source,
+                target_duration_seconds=args.target_duration_seconds,
+            )
+
+            print(f"\nGenerated Short {episode_number} script:")
+            print(script)
+
+            outputs = run_full_generation_pipeline(episode_topic, script, args)
+            run_folder = outputs.get("run_folder")
+            upload_check_result = outputs.get("upload_check_result")
+            result["run_folder"] = run_folder
+            result["upload_ready"] = bool(
+                upload_check_result and upload_check_result.get("ready")
+            )
+
+            if not run_folder:
+                raise RuntimeError("Short generation did not create an organized run folder")
+
+            if not result["upload_ready"]:
+                errors = (
+                    upload_check_result.get("errors", [])
+                    if upload_check_result
+                    else ["Upload check did not run"]
+                )
+                print("\nUpload check failed:")
+                print(json.dumps(upload_check_result, indent=2))
+                raise RuntimeError("; ".join(errors))
+
+            upload_result = run_private_upload_for_run_folder(
+                run_folder,
+                privacy_status=args.privacy_status,
+            )
+            result["video_id"] = upload_result.get("video_id")
+            result["video_url"] = upload_result.get("video_url")
+            result["thumbnail_uploaded"] = bool(upload_result.get("thumbnail_uploaded"))
+
+            if upload_result.get("thumbnail_error"):
+                result["errors"].append(
+                    f"Thumbnail upload failed: {upload_result['thumbnail_error']}"
+                )
+
+            record_result = {
+                "run_folder": run_folder,
+                "upload_check_result": upload_check_result,
+                "video_format": args.video_format,
+                "target_duration_seconds": args.target_duration_seconds,
+            }
+            result["episode_record_path"] = _write_episode_record(
+                series_folder,
+                episode_source,
+                record_result,
+                upload_result=upload_result,
+            )
+        except Exception as exc:
+            result["errors"].append(str(exc))
+
+            if episode_source:
+                record_result = {
+                    "run_folder": result.get("run_folder"),
+                    "upload_check_result": {
+                        "ready": result.get("upload_ready", False),
+                    },
+                    "video_format": args.video_format,
+                    "target_duration_seconds": args.target_duration_seconds,
+                    "error": str(exc),
+                }
+                result["episode_record_path"] = _write_episode_record(
+                    series_folder,
+                    episode_source,
+                    record_result,
+                )
+
+            summary["episodes"].append(result)
+            if not args.continue_on_error:
+                summary["completed_at"] = datetime.now().isoformat(timespec="seconds")
+                summary["summary_path"] = _write_batch_summary(
+                    summary,
+                    filename_kind="shorts-private-upload-summary",
+                )
+                print(json.dumps(summary, indent=2))
+                raise RuntimeError(
+                    f"Shorts private upload failed on episode {episode_number}. "
+                    f"Saved summary to {summary['summary_path']}. Original error: {exc}"
+                ) from exc
+            continue
+
+        summary["episodes"].append(result)
+
+    summary["completed_at"] = datetime.now().isoformat(timespec="seconds")
+    summary["summary_path"] = _write_batch_summary(
+        summary,
+        filename_kind="shorts-private-upload-summary",
+    )
+
+    print(json.dumps(summary, indent=2))
 
 
 def main():
@@ -578,6 +833,10 @@ def main():
 
     if args.mode == "batch-series":
         run_batch_series(args)
+        return
+
+    if args.mode == "shorts-series-private-upload":
+        run_shorts_series_private_upload(args)
         return
 
     if args.mode == "topic-research":

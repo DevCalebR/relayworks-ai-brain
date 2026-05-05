@@ -128,6 +128,11 @@ def upload_thumbnail(youtube_client, video_id, thumbnail_path):
 UPLOAD_THUMBNAIL_HELPER = upload_thumbnail
 
 
+def upload_thumbnail_for_video(video_id, thumbnail_path):
+    youtube = _build_youtube_client()
+    return UPLOAD_THUMBNAIL_HELPER(youtube, video_id, thumbnail_path)
+
+
 def upload_video_from_run_folder(
     run_folder,
     privacy_status="private",
