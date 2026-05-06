@@ -17,6 +17,8 @@ The pipeline currently supports these CLI modes:
 - `full`: generates a script, captions, metadata, ElevenLabs audio, a burned-in caption video, and optional OpenAI-generated scene images.
 - `thumbnail`: generates a local 1280x720 thumbnail image without generating a video or calling YouTube.
 - `topic-research`: generates and ranks local OpenAI-based YouTube Shorts topic ideas.
+- `daily-shorts`: generates a high-volume daily batch of vertical Shorts packages under `outputs/daily_batches/`.
+- `upload-batch-private`: uploads passed Shorts from a daily batch as private videos only.
 - `series-plan`: generates a reusable series bible, episode plan, full story, and chapter source files.
 - `batch-series`: generates selected episodes from a saved series plan using the existing full video pipeline.
 - `shorts-series-private-upload`: creates or uses a Shorts-focused series plan, generates each vertical Short, validates each organized run folder, and uploads each Short privately.
@@ -43,6 +45,13 @@ Common options:
 - `--niche`: sets the niche to research in `topic-research` mode.
 - `--audience`: optionally sets the target audience in `topic-research` and `series-plan` modes.
 - `--topic-count`: controls how many topic ideas to generate in `topic-research` mode.
+- `--count`: controls how many Shorts to generate in `daily-shorts` mode. Default: `10`.
+- `--short-image-count`: controls AI scene images per Short in `daily-shorts` mode. Default: `5`.
+- `--short-duration-seconds`: controls target spoken duration per Short in `daily-shorts` mode. Default: `45`.
+- `--no-thumbnail`: skips thumbnail generation in `daily-shorts` mode.
+- `--skip-upload-check`: skips local upload-check validation in `daily-shorts` mode.
+- `--batch-folder`: points `upload-batch-private` to a folder under `outputs/daily_batches/`.
+- `--limit`: limits how many passed Shorts `upload-batch-private` uploads.
 - `--episodes`: controls how many episodes to create in `series-plan` mode.
 - `--series-folder`: points `batch-series` to a saved folder under `outputs/series/`.
 - `--episode`: generates one episode from a saved series plan.
@@ -188,6 +197,62 @@ python main.py --mode topic-research --niche "weird history mysteries" --audienc
 
 Topic research uses OpenAI only. It does not call YouTube APIs, scrape the web, use YouTube trend data, or use analytics feedback yet. Generated topic research JSON files are saved under `outputs/topics/` and should not be committed.
 
+## Daily Shorts Production
+
+`daily-shorts` is optimized for high-volume Shorts production in the weird history, mystery, scary factual stories, dark history, strange historical events, and eerie true stories niche. The target production volume is 10-20 Shorts per day, with each Short meaningfully different from the others. Avoid repetitive or spammy batches even when the command can generate volume quickly.
+
+Generate a small test batch:
+
+```bash
+python main.py --mode daily-shorts --count 2 --short-image-count 4
+```
+
+Generate a full daily batch:
+
+```bash
+python main.py --mode daily-shorts --count 20
+```
+
+Generate a niche-specific batch:
+
+```bash
+python main.py --mode daily-shorts --niche "weird history and strange true stories" --count 20
+```
+
+Open the newest batch:
+
+```bash
+open "$(ls -td outputs/daily_batches/*/ | head -1)"
+```
+
+Upload one selected Short privately:
+
+```bash
+python main.py --mode upload --run-folder outputs/daily_batches/<batch-folder>/short-01 --privacy-status private --upload-thumbnail
+```
+
+Daily batch behavior:
+
+- Creates one timestamped folder under `outputs/daily_batches/`.
+- Creates `short-01/`, `short-02/`, and later Short folders inside the batch.
+- Generates unique, specific, curiosity-driven Shorts topics.
+- Uses vertical video format by default.
+- Targets about 45 seconds of narration by default.
+- Generates 5 AI scene images per Short by default, with 4-6 recommended for faster Shorts production.
+- Generates `script.txt`, `captions.srt`, `metadata.json`, `audio.mp3`, `video.mp4`, `images/`, `thumbnail.png` when enabled, and `quality_score.json` for each Short.
+- Runs local upload-check validation by default when each Short package completes.
+- Writes `batch_summary.json` and `NEXT_STEPS.md` at the batch root.
+
+`NEXT_STEPS.md` tells you where the batch folder is, how many Shorts passed quality, how to open the folder on Mac, how to upload-check a selected Short, and how to privately upload a selected Short. Review every video before publishing. `daily-shorts` does not auto-publish publicly, does not schedule videos, and does not use YouTube Analytics.
+
+Optional private batch upload is available for already-reviewed batches:
+
+```bash
+python main.py --mode upload-batch-private --batch-folder outputs/daily_batches/<batch-folder> --limit 3 --upload-thumbnail
+```
+
+`upload-batch-private` only uploads Shorts that passed local quality scoring, always uses `private` privacy status, and writes `upload_results.json` in the batch folder. Do not use it until you have reviewed the generated Shorts.
+
 Generate a reusable series plan:
 
 ```bash
@@ -258,7 +323,7 @@ Behavior:
 
 This command can spend OpenAI, ElevenLabs, and YouTube API quota or credits for every Short in the series. The first YouTube upload may open the browser OAuth flow.
 
-Generated outputs, run folders, series folders, batch summaries, OAuth secrets, OAuth tokens, and `.env` must never be committed.
+Generated outputs, run folders, series folders, daily Shorts batches, batch summaries, OAuth secrets, OAuth tokens, and `.env` must never be committed.
 
 Validate an organized run folder before upload:
 
@@ -520,6 +585,7 @@ Generated outputs are written under `outputs/` and `memory/`:
 - `outputs/topics/`: generated OpenAI topic research `.json` files.
 - `outputs/series/`: generated series bibles, episode plans, chapter files, and per-episode records.
 - `outputs/batches/`: generated batch summary `.json` files.
+- `outputs/daily_batches/`: generated daily Shorts batch folders, per-Short assets, quality scores, and next steps.
 - `outputs/runs/`: timestamped organized copies of successful run outputs.
 - `memory/logs.json`: successful generation run log.
 
@@ -533,7 +599,7 @@ A complete organized `full` run can contain:
 - `thumbnail.png`
 - `images/` if image copying is implemented
 
-Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, generated topic research files, generated series folders, generated batch summaries, and generated run folders are ignored by Git and should not be committed.
+Generated `.txt`, `.srt`, `.json`, `.mp3`, `.mp4`, `.png`, `.jpg`, `.jpeg`, `.webp`, generated topic research files, generated series folders, generated daily batch folders, generated batch summaries, and generated run folders are ignored by Git and should not be committed.
 
 External trend data, YouTube search, analytics, performance feedback, scheduling, and automatic publishing are future milestones.
 
@@ -560,6 +626,7 @@ Never commit:
 - generated output files
 - generated run folders
 - generated series folders, except tracked `.gitkeep` files
+- generated daily Shorts batch folders, except tracked `.gitkeep` files
 - generated batch summaries
 - local test log entries in `memory/logs.json`
 
@@ -603,11 +670,14 @@ If `memory/logs.json` errors during logging, make sure the file contains valid J
 
 - No general automatic thumbnail upload outside `shorts-series-private-upload` and explicit `--upload-thumbnail`.
 - No long-form one-command private upload yet.
+- No automatic public publishing.
 - No scheduling yet.
+- No YouTube Analytics import yet.
 - No stock footage search yet.
+- No background music yet.
 - No external trend data or YouTube search yet.
-- No analytics yet.
-- No automatic performance feedback loop yet.
+- No automatic winner detection or performance feedback loop yet.
+- Private batch upload exists through `upload-batch-private`, but generated Shorts should still be reviewed manually before use.
 
 ## Suggested Next Milestones
 
