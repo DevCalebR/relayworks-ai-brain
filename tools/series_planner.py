@@ -16,8 +16,11 @@ VALID_VIDEO_FORMATS = {"landscape", "vertical"}
 DEFAULT_SUGGESTED_TEMPLATE = "ai"
 DEFAULT_SUGGESTED_IMAGE_COUNT = 12
 DEFAULT_SUGGESTED_VIDEO_FORMAT = "landscape"
+DEFAULT_SHORTS_SUGGESTED_IMAGE_COUNT = 7
+DEFAULT_SHORTS_VIDEO_FORMAT = "vertical"
 DEFAULT_AUDIENCE = "fans of weird history, mysteries, and eerie factual stories"
 DEFAULT_TARGET_DURATION_SECONDS = 150
+DEFAULT_SHORTS_TARGET_DURATION_SECONDS = 75
 DEFAULT_SERIES_TONE = "eerie, factual, cinematic, and suspenseful"
 DEFAULT_FACTUAL_GUARDRAILS = [
     "Use careful factual-edutainment framing and verify historical details during human review.",
@@ -977,6 +980,118 @@ def create_series_plan(
         target_duration_seconds=target_duration_seconds,
         audience=audience_text,
     )
+    _validate_series_plan(series_plan, expected_episodes=episodes)
+    return series_plan
+
+
+def create_shorts_series_plan(
+    topic,
+    episodes=5,
+    target_duration_seconds=DEFAULT_SHORTS_TARGET_DURATION_SECONDS,
+    audience=None,
+):
+    if episodes <= 0:
+        raise ValueError("episodes must be greater than 0")
+    if target_duration_seconds <= 0:
+        raise ValueError("target_duration_seconds must be greater than 0")
+
+    audience_text = audience or DEFAULT_AUDIENCE
+    client = _get_client()
+
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You create factual YouTube Shorts series plans for weird history, "
+                    "mysteries, dark history, and eerie true stories. The output must be "
+                    "short-form first: vertical video, fast pacing, one focused beat per "
+                    "Short, immediate hooks, quick escalation, clear ending teases, and "
+                    "short natural CTAs. Keep every claim careful and factual. Do not "
+                    "invent evidence, dates, names, sources, artifacts, documents, quotes, "
+                    "or official findings. Frame uncertain or disputed details as uncertain "
+                    "or disputed. Return only valid JSON."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Create a complete {episodes}-part YouTube Shorts series plan for: "
+                    f"{topic}\n\n"
+                    f"Audience: {audience_text}\n"
+                    f"Target duration per Short: {target_duration_seconds} seconds\n"
+                    "Video format: vertical\n"
+                    f"Suggested scene image count per Short: {DEFAULT_SHORTS_SUGGESTED_IMAGE_COUNT}\n\n"
+                    "Return one JSON object with these top-level fields:\n"
+                    "series_title, topic, audience, target_duration_seconds, "
+                    "episode_count, tone, factual_guardrails, series_narrative_arc, "
+                    "what_is_known, what_is_uncertain, what_not_to_claim, "
+                    "source_sensitivity_notes, key_people_or_groups, timeline, "
+                    "episode_plan.\n\n"
+                    "episode_plan must contain exactly the requested number of Short "
+                    "objects, numbered sequentially. Each Short must be self-contained "
+                    "but clearly connected to the series.\n\n"
+                    "Each episode object must include: episode_number, title, "
+                    "episode_topic, story_job, hook, chapter_summary, key_beats, "
+                    "continuity_from_previous, ending_tease, next_episode_setup, "
+                    "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
+                    "suggested_video_format, evidence_focus, avoid_repeating. The final "
+                    "episode must also include final_closing_thought.\n\n"
+                    "Shorts planning requirements:\n"
+                    "- suggested_template must be ai.\n"
+                    "- suggested_video_format must be vertical.\n"
+                    f"- suggested_image_count must be {DEFAULT_SHORTS_SUGGESTED_IMAGE_COUNT}.\n"
+                    "- Each hook must be immediate and concrete, usually one sentence.\n"
+                    "- Each Short should cover one focused mystery/history beat only.\n"
+                    "- Each Short needs a quick escalation and a clear reveal, turn, or "
+                    "unresolved tension.\n"
+                    "- Each non-final Short must end with a specific tease to the next "
+                    "Short.\n"
+                    "- The final Short should close the series carefully and memorably.\n"
+                    "- Include a short CTA naturally in the episode plan, but do not make "
+                    "the plan sound like an ad.\n"
+                    "- Avoid long-form episode structure, broad surveys, slow backstory, "
+                    "and multi-topic chapter plans.\n"
+                    "- chapter_summary must be 90-150 words and written as source material "
+                    "for a 75-second Short, not final narration.\n"
+                    "- key_beats must include 4-6 concrete fast-paced beats.\n"
+                    "- evidence_focus must list concrete topic-relevant evidence, facts, "
+                    "locations, records, or clearly labeled disputed details. If concrete "
+                    "evidence is limited, say so and identify what the Short should avoid "
+                    "overstating.\n"
+                    "- avoid_repeating must name specific details this Short should not "
+                    "repeat from earlier Shorts.\n\n"
+                    "Factual guardrails:\n"
+                    "- Do not present speculation as fact.\n"
+                    "- Do not use supernatural, alien, or paranormal theories as credible "
+                    "explanations for factual cases.\n"
+                    "- Do not borrow details from other famous mysteries.\n"
+                    "- Do not use generic evidence labels like expert opinions or "
+                    "historical sources unless the plan names concrete evidence.\n"
+                    "- For Roanoke, do not invent shipboard evidence, lighthouse evidence, "
+                    "or recovered documents.\n"
+                    "- For ship cases, do not invent lighthouse records.\n"
+                    "- For lighthouse cases, do not invent ghost ships or lifeboats."
+                ),
+            },
+        ],
+    )
+
+    content = response.choices[0].message.content
+    series_plan = _extract_json(content)
+    series_plan = _normalize_series_plan(
+        series_plan,
+        topic=topic,
+        episodes=episodes,
+        target_duration_seconds=target_duration_seconds,
+        audience=audience_text,
+    )
+    for episode in series_plan["episode_plan"]:
+        episode["suggested_template"] = DEFAULT_SUGGESTED_TEMPLATE
+        episode["suggested_image_count"] = DEFAULT_SHORTS_SUGGESTED_IMAGE_COUNT
+        episode["suggested_video_format"] = DEFAULT_SHORTS_VIDEO_FORMAT
     _validate_series_plan(series_plan, expected_episodes=episodes)
     return series_plan
 
