@@ -3,11 +3,13 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from moviepy import AudioFileClip
-
 from agents.script_agent import generate_episode_script_from_chapter, generate_script
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
+from tools.generation_pipeline import (
+    get_audio_duration_seconds,
+    run_full_generation_pipeline,
+)
 from tools.image_generator import generate_scene_images
 from tools.image_inputs import collect_image_paths
 from tools.logger import log_pipeline_run
@@ -63,6 +65,8 @@ def parse_args():
             "topic-research",
             "series-plan",
             "batch-series",
+            "daily-shorts",
+            "upload-batch-private",
             "shorts-series-private-upload",
         ],
         default="full",
@@ -173,11 +177,42 @@ def parse_args():
     )
     parser.add_argument(
         "--niche",
-        help="Niche to research when --mode topic-research.",
+        help="Niche to research when --mode topic-research or --mode daily-shorts.",
     )
     parser.add_argument(
         "--audience",
-        help="Optional audience to target when --mode topic-research.",
+        help=(
+            "Optional audience to target when --mode topic-research, "
+            "--mode series-plan, or --mode daily-shorts."
+        ),
+    )
+    parser.add_argument(
+        "--count",
+        type=int,
+        default=10,
+        help="Number of Shorts to generate when --mode daily-shorts.",
+    )
+    parser.add_argument(
+        "--short-image-count",
+        type=int,
+        default=5,
+        help="Number of AI scene images per Short when --mode daily-shorts.",
+    )
+    parser.add_argument(
+        "--short-duration-seconds",
+        type=int,
+        default=45,
+        help="Target spoken duration per Short when --mode daily-shorts.",
+    )
+    parser.add_argument(
+        "--no-thumbnail",
+        action="store_true",
+        help="Skip thumbnail generation when --mode daily-shorts.",
+    )
+    parser.add_argument(
+        "--skip-upload-check",
+        action="store_true",
+        help="Skip local upload-check validation when --mode daily-shorts.",
     )
     parser.add_argument(
         "--topic-count",
@@ -212,6 +247,15 @@ def parse_args():
             "--mode shorts-series-private-upload."
         ),
     )
+    parser.add_argument(
+        "--batch-folder",
+        help="Daily batch folder path required when --mode upload-batch-private.",
+    )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        help="Maximum number of passed Shorts to upload when --mode upload-batch-private.",
+    )
     return parser.parse_args()
 
 
@@ -230,15 +274,6 @@ def log_success(topic, mode, outputs, organize=False):
 
     print("\nLogged pipeline run:")
     print(log_entry)
-
-
-def get_audio_duration_seconds(audio_path):
-    audio_clip = AudioFileClip(audio_path)
-
-    try:
-        return audio_clip.duration
-    finally:
-        audio_clip.close()
 
 
 def print_topic_research(topics, saved_path):
@@ -390,120 +425,6 @@ def _write_episode_record(series_folder, episode_source, result, upload_result=N
     record_path = episodes_folder / f"episode-{episode_number:02d}.json"
     record_path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
     return str(record_path)
-
-
-def generate_full_outputs(topic, script, args):
-    narration_text = ensure_call_to_action(clean_narration_text(script))
-    script_path = save_script(topic, script)
-    outputs = {"script": script_path}
-
-    metadata_path = save_video_metadata(topic, script, topic)
-    outputs["metadata"] = metadata_path
-
-    print("\nSaved metadata path:")
-    print(metadata_path)
-
-    image_paths = []
-    if args.use_ai_images:
-        image_paths = generate_scene_images(
-            topic,
-            narration_text,
-            topic,
-            image_count=args.image_count,
-            template=args.template,
-            video_format=args.video_format,
-        )
-        outputs["images"] = image_paths
-        outputs["ai_images_used"] = True
-        outputs["image_count"] = len(image_paths)
-
-        print("\nSaved AI image paths:")
-        for image_path in image_paths:
-            print(image_path)
-
-    if args.generate_thumbnail:
-        thumbnail_source_paths = None
-
-        if image_paths and not args.use_ai_thumbnail:
-            thumbnail_source_paths = [image_paths[0]]
-
-        thumbnail_path = generate_thumbnail(
-            topic,
-            topic,
-            source_image_paths=thumbnail_source_paths,
-            use_ai=args.use_ai_thumbnail,
-            template=args.template,
-        )
-        outputs["thumbnail"] = thumbnail_path
-
-        print("\nSaved thumbnail path:")
-        print(thumbnail_path)
-
-    audio_path = generate_voiceover(narration_text, topic)
-    outputs["audio"] = audio_path
-
-    print("\nSaved audio path:")
-    print(audio_path)
-
-    audio_duration = get_audio_duration_seconds(audio_path)
-    captions_path = save_srt_captions(
-        narration_text,
-        topic,
-        words_per_caption=args.words_per_caption,
-        seconds_per_caption=args.seconds_per_caption,
-        total_duration_seconds=audio_duration,
-        start_offset_seconds=args.caption_offset,
-    )
-    outputs["captions"] = captions_path
-    outputs["caption_offset"] = args.caption_offset
-    outputs["words_per_caption"] = args.words_per_caption
-    outputs["seconds_per_caption"] = args.seconds_per_caption
-
-    print("\nSaved captions path:")
-    print(captions_path)
-
-    video_path = build_video(
-        audio_path,
-        topic,
-        topic,
-        captions_path,
-        template=args.template,
-        image_paths=image_paths,
-        video_format=args.video_format,
-    )
-    outputs["video"] = video_path
-    outputs["template"] = args.template
-    outputs["video_format"] = args.video_format
-    outputs["images_used"] = bool(image_paths)
-    outputs["image_count"] = len(image_paths)
-
-    print("\nSaved video path:")
-    print(video_path)
-
-    return outputs
-
-
-def run_full_generation_pipeline(topic, script, args):
-    outputs = generate_full_outputs(topic, script, args)
-    run_folder = None
-    upload_check_result = None
-
-    if args.organize:
-        organize_result = organize_run_outputs(topic, outputs)
-        run_folder = organize_result["run_folder"]
-        outputs["run_folder"] = run_folder
-        outputs["copied_outputs"] = organize_result["copied_outputs"]
-
-        print("\nOrganized run folder:")
-        print(run_folder)
-
-        upload_check_result = validate_upload_package(run_folder)
-        outputs["upload_check_result"] = upload_check_result
-
-        print("\nUpload check result:")
-        print(json.dumps(upload_check_result, indent=2))
-
-    return outputs
 
 
 def run_private_upload_for_run_folder(run_folder, privacy_status="private"):
@@ -817,6 +738,18 @@ def main():
     if args.episodes <= 0:
         raise ValueError("--episodes must be greater than 0")
 
+    if args.count <= 0:
+        raise ValueError("--count must be greater than 0")
+
+    if args.short_image_count <= 0:
+        raise ValueError("--short-image-count must be greater than 0")
+
+    if args.short_duration_seconds <= 0:
+        raise ValueError("--short-duration-seconds must be greater than 0")
+
+    if args.limit is not None and args.limit <= 0:
+        raise ValueError("--limit must be greater than 0")
+
     if args.mode == "series-plan":
         if not args.topic:
             raise ValueError("--topic is required when --mode series-plan")
@@ -837,6 +770,47 @@ def main():
 
     if args.mode == "shorts-series-private-upload":
         run_shorts_series_private_upload(args)
+        return
+
+    if args.mode == "daily-shorts":
+        from tools.shorts_batch import (
+            DEFAULT_AUDIENCE,
+            DEFAULT_NICHE,
+            create_daily_shorts_batch,
+        )
+
+        summary = create_daily_shorts_batch(
+            niche=args.niche or DEFAULT_NICHE,
+            count=args.count,
+            audience=args.audience or DEFAULT_AUDIENCE,
+            image_count=args.short_image_count,
+            template=args.template if args.template != "default" else "ai",
+            generate_thumbnail=not args.no_thumbnail,
+            target_duration_seconds=args.short_duration_seconds,
+            video_format="vertical",
+            upload_ready_check=not args.skip_upload_check,
+        )
+
+        print("\nDaily Shorts batch complete:")
+        print(f"Batch folder: {summary['batch_folder']}")
+        print(f"Completed: {summary['count_completed']}")
+        print(f"Passed quality: {summary['count_passed_quality']}")
+        print(f"Batch summary: {summary['batch_summary_path']}")
+        print(f"Next steps: {summary['next_steps_path']}")
+        return
+
+    if args.mode == "upload-batch-private":
+        if not args.batch_folder:
+            raise ValueError("--batch-folder is required when --mode upload-batch-private")
+
+        from tools.shorts_batch import upload_batch_private
+
+        upload_results = upload_batch_private(
+            args.batch_folder,
+            limit=args.limit,
+            upload_thumbnail=args.upload_thumbnail,
+        )
+        print(json.dumps(upload_results, indent=2))
         return
 
     if args.mode == "topic-research":

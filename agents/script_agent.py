@@ -16,12 +16,25 @@ def _get_client() -> OpenAI:
 
 
 DEFAULT_TARGET_DURATION_SECONDS = 150
+DEFAULT_SHORT_TARGET_DURATION_SECONDS = 45
 
 
 def _estimate_word_range(target_duration_seconds: int) -> tuple[int, int]:
     target_words = target_duration_seconds * 2.6
     min_words = max(80, round(target_words * 0.82))
     max_words = max(min_words + 40, round(target_words * 1.15))
+    return min_words, max_words
+
+
+def _estimate_short_word_range(target_duration_seconds: int) -> tuple[int, int]:
+    target_words = target_duration_seconds * 2.55
+    min_words = max(60, round(target_words * 0.78))
+    max_words = max(min_words + 20, round(target_words * 1.12))
+
+    if 35 <= target_duration_seconds <= 60:
+        min_words = max(min_words, 80)
+        max_words = min(max_words, 130)
+
     return min_words, max_words
 
 
@@ -78,6 +91,66 @@ def generate_script(
                     "- Do not include timestamps.\n"
                     "- Do not include bracketed scene directions.\n"
                     "- Do not include camera directions.\n"
+                    "- Output only the words that should be spoken aloud."
+                ),
+            },
+        ],
+    )
+    content = response.choices[0].message.content
+    return content.strip() if content else ""
+
+
+def generate_short_script(
+    topic: str,
+    target_duration_seconds: int = DEFAULT_SHORT_TARGET_DURATION_SECONDS,
+    niche: str = "weird history and strange true stories",
+    audience: str = "fans of weird history, mysteries, and eerie true stories",
+) -> str:
+    if target_duration_seconds <= 0:
+        raise ValueError("target_duration_seconds must be greater than 0")
+
+    min_words, max_words = _estimate_short_word_range(target_duration_seconds)
+
+    client = _get_client()
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "You write factual YouTube Shorts narration for weird history, "
+                    "mysteries, scary factual stories, dark history, strange historical "
+                    "events, and eerie true stories. Keep every Short fast, focused, "
+                    "hook-driven, and honest about uncertainty. Do not invent claims "
+                    "or frame fiction as fact."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Write one YouTube Shorts narration about: {topic}\n\n"
+                    f"Niche: {niche}\n"
+                    f"Audience: {audience}\n"
+                    f"Target spoken duration: about {target_duration_seconds} seconds\n"
+                    f"Target word range: roughly {min_words}-{max_words} words\n\n"
+                    "Requirements:\n"
+                    "- Make this a standalone Short, not an episode or series chapter.\n"
+                    "- Spoken narration only.\n"
+                    "- Start with a strong hook in the first sentence.\n"
+                    "- Keep the story focused on one core idea only.\n"
+                    "- Move quickly: hook, setup, strangest detail, honest context, ending thought.\n"
+                    "- Keep the tone factual edutainment, not fictional horror.\n"
+                    "- Phrase uncertainty honestly when historians disagree or records are unclear.\n"
+                    "- Avoid fake claims presented as fact.\n"
+                    "- Avoid gore for shock value.\n"
+                    "- End with exactly one short, natural call to action.\n"
+                    "- Do not mention AI business, side hustles, or making money in the call to action.\n"
+                    "- Do not include markdown.\n"
+                    "- Do not include speaker labels.\n"
+                    "- Do not include timestamps.\n"
+                    "- Do not include scene directions.\n"
+                    "- Do not include camera directions.\n"
+                    "- Do not include bullets or numbered lists.\n"
                     "- Output only the words that should be spoken aloud."
                 ),
             },

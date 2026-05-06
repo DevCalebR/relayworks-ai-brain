@@ -39,6 +39,28 @@ def organize_run_outputs(topic, outputs):
     run_folder = RUNS_OUTPUT_DIR / f"{_safe_topic_slug(topic)}-{timestamp}"
     run_folder.mkdir(parents=True, exist_ok=True)
 
+    copied_outputs = copy_outputs_to_run_folder(outputs, run_folder)
+
+    return {
+        "run_folder": str(run_folder),
+        "copied_outputs": copied_outputs,
+    }
+
+
+def copy_outputs_to_run_folder(outputs, run_folder):
+    """
+    Copy generated pipeline outputs into a specific local run folder.
+
+    Args:
+        outputs: Dictionary of generated output paths.
+        run_folder: Destination folder that should receive upload-ready files.
+
+    Returns:
+        A dictionary of copied output paths.
+    """
+    run_folder = Path(run_folder)
+    run_folder.mkdir(parents=True, exist_ok=True)
+
     copied_outputs = {}
 
     for output_name, output_path in outputs.items():
@@ -76,7 +98,4 @@ def organize_run_outputs(topic, outputs):
         shutil.copy2(source_path, destination_path)
         copied_outputs[output_name] = str(destination_path)
 
-    return {
-        "run_folder": str(run_folder),
-        "copied_outputs": copied_outputs,
-    }
+    return copied_outputs

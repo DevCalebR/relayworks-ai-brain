@@ -13,6 +13,7 @@ DEFAULT_HASHTAGS = [
     "#unsolved",
     "#strangehistory",
 ]
+SHORTS_HASHTAGS = ["#shorts", "#historyshorts", "#weirdhistory"]
 DEFAULT_TAGS = [
     "weird history",
     "mystery",
@@ -27,6 +28,13 @@ DEFAULT_TAGS = [
     "mystery documentary",
     "creepy history",
     "unexplained history",
+]
+SHORTS_TAGS = [
+    "youtube shorts",
+    "history shorts",
+    "weird history shorts",
+    "mystery shorts",
+    "true story shorts",
 ]
 ROANOKE_TAGS = [
     "lost colony",
@@ -99,9 +107,12 @@ def _dedupe(items):
     return deduped
 
 
-def _build_tags(topic, script):
+def _build_tags(topic, script, content_style="episode"):
     topic_text = str(topic).lower()
     tags = list(DEFAULT_TAGS)
+
+    if content_style == "short":
+        tags = SHORTS_TAGS + tags
 
     if "roanoke" in topic_text or "croatoan" in topic_text:
         tags.extend(ROANOKE_TAGS)
@@ -122,8 +133,11 @@ def _build_tags(topic, script):
     return _dedupe(tags)[:25]
 
 
-def _build_hashtags(topic):
+def _build_hashtags(topic, content_style="episode"):
     hashtags = list(DEFAULT_HASHTAGS)
+
+    if content_style == "short":
+        hashtags = SHORTS_HASHTAGS + hashtags
 
     topic_text = str(topic).lower()
     if "roanoke" in topic_text:
@@ -166,9 +180,21 @@ def _episode_line(topic):
     )
 
 
-def _build_description(topic, hashtags):
+def _build_description(topic, hashtags, content_style="episode"):
     clean_topic = str(topic).strip() or "Untitled video"
     topic_text = clean_topic.lower()
+
+    if content_style == "short":
+        intro = (
+            f"A fast factual Short about {clean_topic}, told for fans of weird "
+            "history, mysteries, dark history, and eerie true stories."
+        )
+        paragraphs = [intro]
+        paragraphs.append(
+            "If you want more strange stories like this, like this video and subscribe."
+        )
+        paragraphs.append(" ".join(hashtags))
+        return "\n\n".join(paragraphs)
 
     if "roanoke" in topic_text:
         intro = (
@@ -197,7 +223,7 @@ def _build_description(topic, hashtags):
     return "\n\n".join(paragraphs)
 
 
-def save_video_metadata(topic, script, output_name):
+def save_video_metadata(topic, script, output_name, content_style="episode"):
     """
     Save local YouTube-ready metadata for a generated video.
 
@@ -213,14 +239,19 @@ def save_video_metadata(topic, script, output_name):
 
     clean_topic = str(topic).strip() or "Untitled video"
     output_path = METADATA_OUTPUT_DIR / f"{_safe_filename(output_name)}.json"
-    hashtags = _build_hashtags(clean_topic)
+    hashtags = _build_hashtags(clean_topic, content_style=content_style)
 
     metadata = {
         "title": clean_topic,
-        "description": _build_description(clean_topic, hashtags),
-        "tags": _build_tags(clean_topic, script),
+        "description": _build_description(
+            clean_topic,
+            hashtags,
+            content_style=content_style,
+        ),
+        "tags": _build_tags(clean_topic, script, content_style=content_style),
         "hashtags": hashtags,
         "topic": topic,
+        "content_style": content_style,
         "generated_from": GENERATED_FROM,
     }
 
