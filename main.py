@@ -215,6 +215,13 @@ def parse_args():
         help="Skip local upload-check validation when --mode daily-shorts.",
     )
     parser.add_argument(
+        "--ignore-topic-history",
+        action="store_true",
+        help=(
+            "Allow daily-shorts to reuse topics by skipping local topic history checks."
+        ),
+    )
+    parser.add_argument(
         "--topic-count",
         type=int,
         default=10,
@@ -789,6 +796,7 @@ def main():
             target_duration_seconds=args.short_duration_seconds,
             video_format="vertical",
             upload_ready_check=not args.skip_upload_check,
+            ignore_topic_history=args.ignore_topic_history,
         )
 
         print("\nDaily Shorts batch complete:")

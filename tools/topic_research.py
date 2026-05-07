@@ -90,12 +90,24 @@ def _parse_topics(content):
     return normalized_topics
 
 
-def research_topics(niche, audience=None, count=10):
+def research_topics(niche, audience=None, count=10, avoid_topics=None):
     if count <= 0:
         raise ValueError("--topic-count must be greater than 0")
 
     client = _get_client()
     audience_text = audience or "the most likely buyer-facing audience for this niche"
+    avoid_topics = [
+        _text(topic)
+        for topic in (avoid_topics or [])
+        if _text(topic)
+    ]
+    avoid_instruction = ""
+    if avoid_topics:
+        avoid_instruction = (
+            "\n\nDo not reuse these previously used topics or close variations:\n"
+            + "\n".join(f"- {topic}" for topic in avoid_topics[:50])
+        )
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
@@ -138,6 +150,7 @@ def research_topics(niche, audience=None, count=10):
                     "- tags, array of short strings\n\n"
                     "Prefer suggested_template bold or ai for eerie, mystery, or dark history "
                     "topics when appropriate."
+                    f"{avoid_instruction}"
                 ),
             },
         ],

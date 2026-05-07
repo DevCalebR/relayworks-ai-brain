@@ -12,10 +12,13 @@ from tools.youtube_api import upload_video_from_run_folder
 
 
 DAILY_BATCHES_OUTPUT_DIR = Path("outputs/daily_batches")
+TOPIC_HISTORY_PATH = Path("memory/daily_shorts_topics.json")
 DEFAULT_NICHE = "weird history and strange true stories"
 DEFAULT_AUDIENCE = "fans of weird history, mysteries, and eerie true stories"
 DEFAULT_TARGET_DURATION_SECONDS = 45
 DEFAULT_IMAGE_COUNT = 5
+TOPIC_GENERATION_ATTEMPTS = 2
+RECENT_TOPIC_PROMPT_LIMIT = 40
 GENERIC_TOPICS = {
     "weird history",
     "weird history facts",
@@ -84,6 +87,26 @@ def _next_batch_folder(niche):
 
 def _normalize_text(value):
     return re.sub(r"\s+", " ", str(value or "")).strip()
+
+
+def normalize_topic(topic):
+    normalized = str(topic or "").lower().strip()
+    normalized = normalized.translate(
+        str.maketrans(
+            {
+                "’": "'",
+                "‘": "'",
+                "“": '"',
+                "”": '"',
+                "–": "-",
+                "—": "-",
+            }
+        )
+    )
+    normalized = normalized.replace("'", "")
+    normalized = re.sub(r"[-_/]+", " ", normalized)
+    normalized = re.sub(r"[^a-z0-9\s]", " ", normalized)
+    return re.sub(r"\s+", " ", normalized).strip()
 
 
 def _word_count(text):
@@ -288,31 +311,240 @@ def score_short_quality(
     }
 
 
-def _topic_records(niche, audience, count):
-    researched_topics = research_topics(niche=niche, audience=audience, count=count)
-    topic_records = []
-    seen = set()
+def _topic_history_path(topic_history_path=None):
+    return Path(topic_history_path) if topic_history_path else TOPIC_HISTORY_PATH
 
-    for item in researched_topics:
-        topic = _normalize_text(item.get("topic") if isinstance(item, dict) else item)
-        topic_key = topic.lower()
 
-        if not topic or topic_key in seen:
-            continue
+def _load_topic_history(topic_history_path=None):
+    history_path = _topic_history_path(topic_history_path)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
 
-        seen.add(topic_key)
-        topic_records.append(item if isinstance(item, dict) else {"topic": topic})
+    if not history_path.exists():
+        try:
+            history_path.write_text("[]\n", encoding="utf-8")
+        except OSError as exc:
+            raise RuntimeError(
+                f"Could not initialize daily Shorts topic history: {history_path}"
+            ) from exc
+        return []
 
-        if len(topic_records) == count:
-            break
+    try:
+        history = json.loads(history_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Daily Shorts topic history is not valid JSON: {history_path}"
+        ) from exc
 
-    if len(topic_records) < count:
-        raise RuntimeError(
-            f"Topic research returned {len(topic_records)} unique topics, "
-            f"but {count} were requested."
+    if not isinstance(history, list):
+        raise ValueError(
+            f"Daily Shorts topic history must be a JSON array: {history_path}"
         )
 
-    return topic_records
+    return history
+
+
+def _write_topic_history(history, topic_history_path=None):
+    history_path = _topic_history_path(topic_history_path)
+    history_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        history_path.write_text(
+            json.dumps(history, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        raise RuntimeError(
+            f"Could not write daily Shorts topic history: {history_path}"
+        ) from exc
+
+
+def _history_topic_key(record):
+    if not isinstance(record, dict):
+        return ""
+
+    return normalize_topic(record.get("normalized_topic") or record.get("topic"))
+
+
+def _recent_history_topics(history, limit=RECENT_TOPIC_PROMPT_LIMIT):
+    topics = []
+
+    for record in reversed(history):
+        if not isinstance(record, dict):
+            continue
+
+        topic = _normalize_text(record.get("topic") or record.get("normalized_topic"))
+        if topic:
+            topics.append(topic)
+
+        if len(topics) == limit:
+            break
+
+    return list(reversed(topics))
+
+
+def _candidate_topic_count(missing_count, first_attempt=False):
+    if first_attempt:
+        return missing_count + max(10, missing_count // 2)
+
+    return missing_count + max(5, missing_count // 2)
+
+
+def _topic_title(topic_record):
+    if not isinstance(topic_record, dict):
+        return ""
+
+    return _normalize_text(topic_record.get("title") or topic_record.get("suggested_title"))
+
+
+def _save_topic_history(
+    topic_records,
+    niche,
+    audience,
+    batch_id,
+    first_used_at,
+    topic_history_path=None,
+):
+    history = _load_topic_history(topic_history_path)
+    existing_keys = {_history_topic_key(record) for record in history}
+    existing_keys.discard("")
+    saved_count = 0
+
+    for index, topic_record in enumerate(topic_records, start=1):
+        topic = _normalize_text(
+            topic_record.get("topic") if isinstance(topic_record, dict) else topic_record
+        )
+        normalized_topic = normalize_topic(topic)
+
+        if not topic or not normalized_topic or normalized_topic in existing_keys:
+            continue
+
+        history_record = {
+            "topic": topic,
+            "normalized_topic": normalized_topic,
+            "niche": niche,
+            "audience": audience,
+            "first_used_at": first_used_at,
+            "batch_id": batch_id,
+            "short_number": index,
+        }
+        title = _topic_title(topic_record)
+        if title:
+            history_record["title"] = title
+
+        history.append(history_record)
+        existing_keys.add(normalized_topic)
+        saved_count += 1
+
+    _write_topic_history(history, topic_history_path)
+    return saved_count
+
+
+def _topic_shortfall_warning(count, fresh_count):
+    if fresh_count >= count:
+        return None
+
+    return (
+        f"You requested {count} Shorts, but the system only found {fresh_count} "
+        "fresh topics after checking previous topic history and retrying. "
+        "Review this batch, then rerun with a broader niche or lower count."
+    )
+
+
+def _topic_records(
+    niche,
+    audience,
+    count,
+    batch_id=None,
+    first_used_at=None,
+    ignore_topic_history=False,
+    topic_history_path=None,
+):
+    history = _load_topic_history(topic_history_path)
+    previous_topic_keys = set()
+    if not ignore_topic_history:
+        previous_topic_keys = {
+            topic_key
+            for topic_key in (_history_topic_key(record) for record in history)
+            if topic_key
+        }
+    topic_records = []
+    accepted_topic_keys = set()
+    reused_topics_skipped = 0
+    duplicate_topics_skipped = 0
+    attempts = 0
+
+    for attempt in range(1, TOPIC_GENERATION_ATTEMPTS + 1):
+        if len(topic_records) >= count:
+            break
+
+        missing_count = count - len(topic_records)
+        candidate_count = _candidate_topic_count(
+            missing_count,
+            first_attempt=attempt == 1,
+        )
+        avoid_topics = None
+
+        if attempt > 1 and not ignore_topic_history:
+            avoid_topics = _recent_history_topics(history)
+            avoid_topics.extend(record["topic"] for record in topic_records)
+
+        researched_topics = research_topics(
+            niche=niche,
+            audience=audience,
+            count=candidate_count,
+            avoid_topics=avoid_topics,
+        )
+        attempts += 1
+
+        for item in researched_topics:
+            topic = _normalize_text(item.get("topic") if isinstance(item, dict) else item)
+            topic_key = normalize_topic(topic)
+
+            if not topic or not topic_key:
+                continue
+
+            if topic_key in accepted_topic_keys:
+                duplicate_topics_skipped += 1
+                continue
+
+            if not ignore_topic_history and topic_key in previous_topic_keys:
+                reused_topics_skipped += 1
+                continue
+
+            accepted_topic_keys.add(topic_key)
+            topic_record = dict(item) if isinstance(item, dict) else {"topic": topic}
+            topic_record["topic"] = topic
+            topic_records.append(topic_record)
+
+            if len(topic_records) == count:
+                break
+
+    saved_count = _save_topic_history(
+        topic_records,
+        niche=niche,
+        audience=audience,
+        batch_id=batch_id,
+        first_used_at=first_used_at or datetime.now().isoformat(timespec="seconds"),
+        topic_history_path=topic_history_path,
+    )
+
+    fresh_count = len(topic_records)
+    shortfall_warning = _topic_shortfall_warning(count, fresh_count)
+
+    return {
+        "records": topic_records,
+        "count_requested": count,
+        "count_planned": fresh_count,
+        "topic_shortfall": bool(shortfall_warning),
+        "topic_shortfall_warning": shortfall_warning,
+        "topic_generation_attempts": attempts,
+        "topic_history_checked": not ignore_topic_history,
+        "topic_history_path": str(_topic_history_path(topic_history_path)),
+        "topic_history_saved": saved_count,
+        "reused_topics_skipped": reused_topics_skipped,
+        "duplicate_topics_skipped": duplicate_topics_skipped,
+        "fresh_topics_generated": fresh_count,
+    }
 
 
 def _metadata_from_short_folder(short_folder):
@@ -371,8 +603,26 @@ def _write_next_steps(summary, next_steps_path):
     )
     selected_folder = first_ready["folder"] if first_ready else f"{batch_folder}/short-01"
     upload_thumbnail_flag = " --upload-thumbnail" if summary["generate_thumbnail"] else ""
+    topic_history_checked = "yes" if summary.get("topic_history_checked") else "no"
+    topic_shortfall_warning = summary.get("topic_shortfall_warning")
+    topic_warning_section = (
+        f"\n> Warning: {topic_shortfall_warning}\n"
+        if topic_shortfall_warning
+        else ""
+    )
+    topic_history_result = (
+        f"The system generated {summary['fresh_topics_generated']} fresh topics "
+        "and saved them to topic history."
+        if not summary.get("topic_shortfall") and summary.get("topic_history_checked")
+        else ""
+    )
 
     content = f"""# Daily Shorts Batch Next Steps
+{topic_warning_section}
+Topic history checked: {topic_history_checked}
+Fresh topics generated: {summary["fresh_topics_generated"]}
+Previously used topics skipped: {summary["reused_topics_skipped"]}
+{topic_history_result}
 
 Batch folder:
 
@@ -381,6 +631,7 @@ Batch folder:
 ```
 
 Generated {summary["count_completed"]} of {summary["count_requested"]} requested Shorts.
+Planned fresh topics: {summary["count_planned"]}
 Quality passed: {summary["count_passed_quality"]}
 Quality failed: {summary["count_failed_quality"]}
 
@@ -456,6 +707,7 @@ def create_daily_shorts_batch(
     target_duration_seconds=DEFAULT_TARGET_DURATION_SECONDS,
     video_format="vertical",
     upload_ready_check=True,
+    ignore_topic_history=False,
 ):
     if count <= 0:
         raise ValueError("count must be greater than 0")
@@ -472,7 +724,15 @@ def create_daily_shorts_batch(
     batch_folder = _next_batch_folder(niche)
     batch_id = batch_folder.name
     created_at = datetime.now().isoformat(timespec="seconds")
-    topic_records = _topic_records(niche, audience, count)
+    topic_plan = _topic_records(
+        niche,
+        audience,
+        count,
+        batch_id=batch_id,
+        first_used_at=created_at,
+        ignore_topic_history=ignore_topic_history,
+    )
+    topic_records = topic_plan["records"]
     shorts = []
 
     for index, topic_record in enumerate(topic_records, start=1):
@@ -554,6 +814,7 @@ def create_daily_shorts_batch(
 
     count_completed = sum(1 for short in shorts if short.get("video_path"))
     count_passed = sum(1 for short in shorts if short.get("passed"))
+    count_planned = len(topic_records)
     summary = {
         "batch_id": batch_id,
         "batch_folder": str(batch_folder),
@@ -562,15 +823,24 @@ def create_daily_shorts_batch(
         "niche": niche,
         "audience": audience,
         "count_requested": count,
+        "count_planned": count_planned,
         "count_completed": count_completed,
         "count_passed_quality": count_passed,
-        "count_failed_quality": count - count_passed,
+        "count_failed_quality": count_planned - count_passed,
         "image_count": image_count,
         "template": template,
         "generate_thumbnail": generate_thumbnail,
         "target_duration_seconds": target_duration_seconds,
         "video_format": video_format,
         "upload_ready_check": upload_ready_check,
+        "topic_shortfall": topic_plan["topic_shortfall"],
+        "topic_shortfall_warning": topic_plan["topic_shortfall_warning"],
+        "topic_generation_attempts": topic_plan["topic_generation_attempts"],
+        "topic_history_checked": topic_plan["topic_history_checked"],
+        "topic_history_path": topic_plan["topic_history_path"],
+        "topic_history_saved": topic_plan["topic_history_saved"],
+        "reused_topics_skipped": topic_plan["reused_topics_skipped"],
+        "fresh_topics_generated": topic_plan["fresh_topics_generated"],
         "shorts": shorts,
     }
     summary_path = batch_folder / "batch_summary.json"
