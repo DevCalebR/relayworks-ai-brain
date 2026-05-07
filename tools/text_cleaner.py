@@ -36,25 +36,60 @@ _EMOJI_PATTERN = re.compile(
     flags=re.UNICODE,
 )
 
-_CTA_PATTERN = re.compile(
+_SENTENCE_PATTERN = re.compile(r"[^.!?]+(?:[.!?]+|$)")
+
+_LIKE_CTA_PATTERN = re.compile(
     r"\b(?:"
-    r"subscribe|"
-    r"(?:please\s+)?like\s+(?:this\s+video|and\s+subscribe)|"
+    r"like\s+this\s+video|"
+    r"like\s+the\s+video|"
+    r"like\s*(?:,|and|&)\s*subscribe|"
+    r"hit\s+(?:the\s+)?like|"
+    r"leave\s+a\s+like|"
     r"please\s+like|"
-    r"follow|"
-    r"comments?|"
+    r"to\s+like"
+    r")\b",
+    flags=re.IGNORECASE,
+)
+
+_SUBSCRIBE_CTA_PATTERN = re.compile(
+    r"\b(?:subscribe|hit\s+(?:the\s+)?subscribe)\b",
+    flags=re.IGNORECASE,
+)
+
+_OTHER_CTA_PATTERN = re.compile(
+    r"\b(?:"
+    r"follow(?:\s+for\s+more)?|"
     r"comment\s+below|"
     r"dive\s+into\s+the\s+comments|"
     r"share\s+your\s+thoughts|"
-    r"for\s+more\s+stories|"
-    r"for\s+more\s+mysteries|"
-    r"for\s+more\s+strange\s+history|"
+    r"for\s+more\s+(?:stories|mysteries|strange\s+history)|"
     r"if\s+you\s+want\s+more|"
-    r"want\s+more\s+stories|"
-    r"hit\s+subscribe|"
-    r"like\s+and\s+subscribe|"
-    r"subscribe\s+for\s+more"
+    r"if\s+this\s+helped|"
+    r"want\s+more\s+stories"
     r")\b",
+    flags=re.IGNORECASE,
+)
+
+_OFF_NICHE_CTA_PATTERN = re.compile(
+    r"\b(?:ai\s+business|business\s+ideas|side\s+hustles|making\s+money)\b",
+    flags=re.IGNORECASE,
+)
+
+_CTA_START_PATTERN = re.compile(
+    r"(?:^|[,:;.!?]\s+|\b(?:so|and|then)\s+)"
+    r"(?="
+    r"(?:if\s+(?:you\s+want\s+more|this\s+helped)|"
+    r"want\s+more\s+stories|"
+    r"(?:please\s+)?(?:like|subscribe)\b|"
+    r"hit\s+(?:the\s+)?(?:like|subscribe)|"
+    r"leave\s+a\s+like|"
+    r"(?:do\s+not|don't)\s+forget\s+to\s+(?:like|subscribe)|"
+    r"remember\s+to\s+(?:like|subscribe)|"
+    r"follow\b|"
+    r"comment\b|"
+    r"dive\s+into\s+the\s+comments|"
+    r"share\b)"
+    r")",
     flags=re.IGNORECASE,
 )
 
@@ -68,6 +103,82 @@ def _collapse_whitespace(text):
     collapsed_text = re.sub(r"\s*\n\s*", " ", collapsed_text)
     collapsed_text = re.sub(r"\s{2,}", " ", collapsed_text)
     return collapsed_text.strip()
+
+
+def _split_sentences(text):
+    return [
+        match.group(0).strip()
+        for match in _SENTENCE_PATTERN.finditer(text)
+        if match.group(0).strip()
+    ]
+
+
+def _has_like_cta(text):
+    if _LIKE_CTA_PATTERN.search(text):
+        return True
+
+    return bool(re.search(r"^\s*(?:please\s+)?like\b", text, flags=re.IGNORECASE))
+
+
+def _has_subscribe_cta(text):
+    return bool(_SUBSCRIBE_CTA_PATTERN.search(text))
+
+
+def _is_complete_cta(text):
+    return (
+        _has_like_cta(text)
+        and _has_subscribe_cta(text)
+        and not _OFF_NICHE_CTA_PATTERN.search(text)
+    )
+
+
+def _is_cta_sentence(text):
+    return (
+        _has_like_cta(text)
+        or _has_subscribe_cta(text)
+        or bool(_OTHER_CTA_PATTERN.search(text))
+    )
+
+
+def _ensure_terminal_punctuation(text):
+    if not text:
+        return text
+
+    if text[-1] in ".!?":
+        return text
+
+    return f"{text}."
+
+
+def _remove_cta_from_sentence(sentence):
+    if not _is_cta_sentence(sentence):
+        return sentence
+
+    cta_match = _CTA_START_PATTERN.search(sentence)
+    if not cta_match:
+        return ""
+
+    remaining_sentence = sentence[: cta_match.start()].strip(" ,;:-")
+    if not remaining_sentence or _is_cta_sentence(remaining_sentence):
+        return ""
+
+    return _ensure_terminal_punctuation(remaining_sentence)
+
+
+def _remove_cta_sentences(sentences, keep_final_cta=False):
+    final_index = len(sentences) - 1
+    cleaned_sentences = []
+
+    for index, sentence in enumerate(sentences):
+        if keep_final_cta and index == final_index:
+            cleaned_sentences.append(sentence)
+            continue
+
+        cleaned_sentence = _remove_cta_from_sentence(sentence)
+        if cleaned_sentence:
+            cleaned_sentences.append(cleaned_sentence)
+
+    return cleaned_sentences
 
 
 def clean_narration_text(text):
@@ -87,14 +198,25 @@ def clean_narration_text(text):
 
 def ensure_call_to_action(text):
     """
-    Ensure narration ends with a short natural call to action.
+    Ensure narration ends with exactly one complete like-and-subscribe CTA.
     """
     narration_text = _collapse_whitespace(str(text or ""))
 
     if not narration_text:
         return _DEFAULT_CTA
 
-    if _CTA_PATTERN.search(narration_text):
-        return narration_text
+    sentences = _split_sentences(narration_text)
+    if not sentences:
+        return _DEFAULT_CTA
 
-    return _collapse_whitespace(f"{narration_text} {_DEFAULT_CTA}")
+    final_sentence = sentences[-1]
+    if _is_complete_cta(final_sentence):
+        cleaned_sentences = _remove_cta_sentences(sentences, keep_final_cta=True)
+        return _collapse_whitespace(" ".join(cleaned_sentences))
+
+    cleaned_sentences = _remove_cta_sentences(sentences)
+    cleaned_narration = _collapse_whitespace(" ".join(cleaned_sentences))
+    if not cleaned_narration:
+        return _DEFAULT_CTA
+
+    return _collapse_whitespace(f"{cleaned_narration} {_DEFAULT_CTA}")
