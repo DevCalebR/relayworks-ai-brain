@@ -42,10 +42,29 @@ DEFAULT_SOURCE_SENSITIVITY_NOTES = [
     "Historical retellings may exaggerate details; review dates, names, locations, evidence descriptions, and theories before production.",
 ]
 DEFAULT_SERIES_NARRATIVE_ARC = (
-    "The series should begin with the central mystery, escalate through context and "
-    "evidence, test the strongest explanations, and end with a careful account of "
-    "what the record can and cannot resolve."
+    "The series should begin with the moment the mystery becomes unavoidable, "
+    "escalate through context, evidence, and contradictions, keep the central "
+    "tension clear episode by episode, and end with a grounded account of what "
+    "the record can resolve and what still remains unknown."
 )
+EPISODE_REQUIRED_FIELDS = [
+    "episode_number",
+    "title",
+    "episode_topic",
+    "hook",
+    "narrative_purpose",
+    "chapter_summary",
+    "key_beats",
+    "evidence_focus",
+    "avoid_repeating",
+    "continuity_from_previous",
+    "ending_tease",
+    "next_episode_setup",
+    "suggested_template",
+    "suggested_image_count",
+    "suggested_thumbnail_angle",
+    "suggested_video_format",
+]
 GENERIC_EVIDENCE_TERMS = {
     "letters",
     "documents",
@@ -71,12 +90,59 @@ GENERIC_TITLE_PHRASES = {
     "the legacy",
     "life before the mystery",
     "what happened",
+    "the clues",
+    "the enduring mystery",
+    "life aboard",
+    "the final chapter",
+    "the mystery",
+    "the context",
 }
 SENSATIONAL_TITLE_PHRASES = {
     "dancing until dead",
     "the killer dance",
     "everyone died dancing",
+    "everyone died",
     "the curse that killed them",
+    "the ship that shouldn't exist",
+    "the ship that shouldnt exist",
+    "the ship that shouldn t exist",
+    "the lighthouse that murdered them",
+}
+WEAK_HOOK_PHRASES = {
+    "this episode explores",
+    "in this episode",
+    "we will explore",
+    "what really happened",
+    "what happened?",
+    "the mystery remains",
+    "why does this still haunt history",
+}
+VAGUE_SOURCE_PHRASES = {
+    "experts say",
+    "expert opinions",
+    "expert commentary",
+    "interviews with officials",
+    "witness interviews",
+    "scholars agree",
+    "records show",
+    "historical sources",
+    "historical documents",
+    "scholarly articles",
+    "psychological studies",
+    "official sentiment",
+    "recorded statements",
+    "testimonies",
+    "unnamed sources",
+}
+VAGUE_BEAT_PHRASES = {
+    "historical context",
+    "expert opinions",
+    "possible theories",
+    "legacy",
+    "introduction",
+    "discussion",
+    "expert analysis",
+    "final thoughts",
 }
 SUSPICIOUS_TOPIC_TERMS = {
     "cryptic notes",
@@ -206,31 +272,13 @@ def _validate_series_plan(series_plan, expected_episodes=None):
             f"Series plan expected {expected_episodes} episodes but got {len(episode_plan)}"
         )
 
-    episode_required_fields = [
-        "episode_number",
-        "title",
-        "episode_topic",
-        "hook",
-        "chapter_summary",
-        "key_beats",
-        "continuity_from_previous",
-        "ending_tease",
-        "next_episode_setup",
-        "suggested_template",
-        "suggested_image_count",
-        "suggested_thumbnail_angle",
-        "suggested_video_format",
-        "evidence_focus",
-        "avoid_repeating",
-    ]
-
     episode_numbers = []
     for episode in episode_plan:
         if not isinstance(episode, dict):
             raise ValueError("Each episode_plan item must be an object")
 
         missing_episode_fields = [
-            field for field in episode_required_fields if field not in episode
+            field for field in EPISODE_REQUIRED_FIELDS if field not in episode
         ]
         if missing_episode_fields:
             episode_number = episode.get("episode_number", "unknown")
@@ -665,10 +713,19 @@ def _normalize_episode_defaults(series_plan):
             pass
 
         episode_number = _parse_positive_int(episode.get("episode_number"))
+        default_story_job = (
+            _default_story_job(episode_number, episode_count)
+            or "Advance the serialized story with new evidence, context, or tension."
+        )
+        episode["narrative_purpose"] = str(
+            episode.get("narrative_purpose")
+            or episode.get("story_job")
+            or default_story_job
+        )
         episode["story_job"] = str(
             episode.get("story_job")
-            or _default_story_job(episode_number, episode_count)
-            or "Advance the serialized story with new evidence, context, or tension."
+            or episode.get("narrative_purpose")
+            or default_story_job
         )
 
         if _title_needs_story_repair(episode.get("title")):
@@ -716,6 +773,292 @@ def _normalize_episode_numbers(series_plan, expected_episodes=None):
 
     series_plan["episode_count"] = expected_episodes
     return series_plan
+
+
+def _quality_value_text(value):
+    if isinstance(value, list):
+        return " ".join(_quality_value_text(item) for item in value)
+    if isinstance(value, dict):
+        return " ".join(
+            f"{_quality_value_text(key)} {_quality_value_text(item)}"
+            for key, item in value.items()
+        )
+    return str(value or "").strip()
+
+
+def _field_is_empty(value):
+    if isinstance(value, list):
+        return not any(_quality_value_text(item) for item in value)
+    return not _quality_value_text(value)
+
+
+def _simple_text_key(value):
+    text = str(value or "").lower()
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def _meaningful_tokens(value):
+    stop_words = {
+        "a",
+        "an",
+        "and",
+        "episode",
+        "in",
+        "of",
+        "part",
+        "the",
+        "to",
+        "what",
+        "that",
+    }
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", _simple_text_key(value))
+        if token not in stop_words
+    }
+
+
+def _text_similarity(left, right):
+    left_tokens = _meaningful_tokens(left)
+    right_tokens = _meaningful_tokens(right)
+    if not left_tokens or not right_tokens:
+        return 0.0
+    return len(left_tokens & right_tokens) / len(left_tokens | right_tokens)
+
+
+def _episode_number_label(episode, fallback_index):
+    return episode.get("episode_number", fallback_index) if isinstance(episode, dict) else fallback_index
+
+
+def _is_generic_title(title):
+    normalized = _simple_text_key(title)
+    return normalized in GENERIC_TITLE_PHRASES
+
+
+def _is_sensational_title(title):
+    normalized = _simple_text_key(title)
+    return any(phrase in normalized for phrase in SENSATIONAL_TITLE_PHRASES)
+
+
+def _is_weak_hook(hook):
+    hook_text = _quality_value_text(hook)
+    normalized = _simple_text_key(hook_text)
+    if not hook_text:
+        return True
+    if any(phrase in normalized for phrase in WEAK_HOOK_PHRASES):
+        return True
+    if len(_meaningful_tokens(hook_text)) < 6:
+        return True
+    if hook_text.endswith("?") and len(hook_text.split()) <= 8:
+        return True
+    return False
+
+
+def _episode_quality_text(episode):
+    return " ".join(
+        _quality_value_text(episode.get(field))
+        for field in [
+            "title",
+            "episode_topic",
+            "hook",
+            "narrative_purpose",
+            "story_job",
+            "chapter_summary",
+            "key_beats",
+            "evidence_focus",
+            "ending_tease",
+        ]
+    )
+
+
+def _append_unique(items, value):
+    if value and value not in items:
+        items.append(value)
+
+
+def validate_series_plan_quality(series_plan):
+    """
+    Return a lightweight local quality report for batch-series readiness.
+    """
+    report = {
+        "ready_for_batch": True,
+        "issues": [],
+        "warnings": [],
+        "suggestions": [],
+    }
+
+    def issue(message, suggestion=None):
+        _append_unique(report["issues"], message)
+        if suggestion:
+            _append_unique(report["suggestions"], suggestion)
+
+    def warning(message):
+        _append_unique(report["warnings"], message)
+
+    if not isinstance(series_plan, dict):
+        issue("Series plan must be a JSON object.")
+        report["ready_for_batch"] = False
+        return report
+
+    episode_plan = series_plan.get("episode_plan")
+    if not isinstance(episode_plan, list) or not episode_plan:
+        issue(
+            "episode_plan is missing or empty.",
+            "Regenerate or repair the series plan before running batch-series.",
+        )
+        report["ready_for_batch"] = False
+        return report
+
+    expected_episodes = _parse_positive_int(series_plan.get("episode_count"))
+    if expected_episodes is None:
+        issue("episode_count is missing or invalid.")
+    elif len(episode_plan) != expected_episodes:
+        issue(
+            f"episode_count is {expected_episodes}, but episode_plan has {len(episode_plan)} episodes.",
+            "Make episode_count match the saved episode plan before batching.",
+        )
+
+    seen_titles = {}
+    prior_episode_topics = []
+    for index, episode in enumerate(episode_plan, start=1):
+        if not isinstance(episode, dict):
+            issue(f"Episode {index} is not a JSON object.")
+            continue
+
+        episode_number = _episode_number_label(episode, index)
+        for field in EPISODE_REQUIRED_FIELDS:
+            if field not in episode or _field_is_empty(episode.get(field)):
+                issue(
+                    f"Episode {episode_number} is missing required field: {field}.",
+                    "Add complete episode objects before running batch-series.",
+                )
+
+        template = str(episode.get("suggested_template") or "").strip().lower()
+        if template not in VALID_TEMPLATES:
+            issue(
+                f"Episode {episode_number} uses unsupported template: {episode.get('suggested_template')}.",
+                "Use one of: default, bold, minimal, ai.",
+            )
+            episode["suggested_template"] = DEFAULT_SUGGESTED_TEMPLATE
+            warning(
+                f"Episode {episode_number} suggested_template was normalized to ai for review."
+            )
+
+        video_format = str(episode.get("suggested_video_format") or "").strip().lower()
+        if video_format not in VALID_VIDEO_FORMATS:
+            issue(
+                f"Episode {episode_number} uses unsupported video format: {episode.get('suggested_video_format')}.",
+                "Use landscape for the current primary 2-3 minute episode format.",
+            )
+            episode["suggested_video_format"] = DEFAULT_SUGGESTED_VIDEO_FORMAT
+            warning(
+                f"Episode {episode_number} suggested_video_format was normalized to landscape for review."
+            )
+
+        title = _quality_value_text(episode.get("title"))
+        title_key = _simple_text_key(title)
+        if _is_generic_title(title):
+            issue(
+                f"Episode {episode_number} has a generic title: {title}.",
+                "Replace generic titles with specific factual titles tied to the episode's unique purpose.",
+            )
+        if _is_sensational_title(title):
+            issue(
+                f"Episode {episode_number} has an overclaiming title: {title}.",
+                "Use dramatic but factual titles that do not overstate uncertain facts.",
+            )
+        if title_key and title_key in seen_titles:
+            issue(
+                f"Episode {episode_number} repeats the title used by episode {seen_titles[title_key]}: {title}.",
+                "Give every episode a distinct title and narrative job.",
+            )
+        elif title_key:
+            seen_titles[title_key] = episode_number
+
+        hook = _quality_value_text(episode.get("hook"))
+        if _is_weak_hook(hook):
+            issue(
+                f"Episode {episode_number} has an empty or weak hook.",
+                "Open with a concrete image, contradiction, discovery, or eerie factual detail.",
+            )
+
+        if _field_is_empty(episode.get("ending_tease")):
+            issue(
+                f"Episode {episode_number} has no ending tease.",
+                "Add a specific reason for the viewer to continue or a memorable grounded finale line.",
+            )
+
+        if _field_is_empty(episode.get("narrative_purpose")):
+            issue(
+                f"Episode {episode_number} has no narrative_purpose.",
+                "Explain the job this episode performs in the larger mystery arc.",
+            )
+
+        episode_text = _simple_text_key(_episode_quality_text(episode))
+        for phrase in VAGUE_SOURCE_PHRASES:
+            if phrase in episode_text:
+                issue(
+                    f"Episode {episode_number} uses vague or fake-source-adjacent wording: {phrase}.",
+                    "Name the category of evidence carefully or label the detail as disputed.",
+                )
+
+        for phrase in VAGUE_BEAT_PHRASES:
+            if phrase in _simple_text_key(episode.get("key_beats", [])):
+                issue(
+                    f"Episode {episode_number} has vague key beat wording: {phrase}.",
+                    "Replace broad labels with concrete, visual story beats.",
+                )
+
+        episode_topic = _quality_value_text(
+            episode.get("episode_topic") or episode.get("chapter_summary")
+        )
+        for prior_number, prior_topic in prior_episode_topics:
+            if _text_similarity(episode_topic, prior_topic) >= 0.72:
+                issue(
+                    f"Episode {episode_number} appears too similar to episode {prior_number}.",
+                    "Separate episode purposes and avoid repeating the same evidence or context.",
+                )
+                break
+        prior_episode_topics.append((episode_number, episode_topic))
+
+    if _field_is_empty(series_plan.get("series_narrative_arc")):
+        issue(
+            "series_narrative_arc is missing.",
+            "Add an arc that names the beginning, escalation, central tension, episode-by-episode learning, and finale.",
+        )
+    elif len(_meaningful_tokens(series_plan.get("series_narrative_arc"))) < 18:
+        issue(
+            "series_narrative_arc is too thin.",
+            "Expand it so the batch has a clear connected documentary arc.",
+        )
+
+    if report["issues"]:
+        report["ready_for_batch"] = False
+    else:
+        _append_unique(
+            report["suggestions"],
+            "Review factual details manually before spending credits on batch-series.",
+        )
+
+    return report
+
+
+def series_plan_from_loaded(loaded_plan):
+    return {
+        **loaded_plan.get("series_bible", {}),
+        "episode_plan": loaded_plan.get("episode_plan", []),
+    }
+
+
+def save_quality_report(series_plan, series_folder):
+    quality_report = validate_series_plan_quality(series_plan)
+    quality_report_path = Path(series_folder) / "quality_report.json"
+    quality_report_path.write_text(
+        json.dumps(quality_report, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return quality_report, str(quality_report_path)
 
 
 def create_series_plan(
@@ -793,9 +1136,10 @@ def create_series_plan(
                     "episode_plan.\n\n"
                     "series_narrative_arc is mandatory. In a few sentences, describe "
                     "where the mystery begins, how the story escalates, the central "
-                    "tension, and what the finale resolves or leaves unknown. The whole "
-                    "series should feel like one connected eerie, cinematic, factual, "
-                    "curiosity-driven documentary arc, not separate school-report topics.\n\n"
+                    "tension, what the viewer learns episode by episode, and what the "
+                    "finale resolves or leaves unknown. The whole series should feel "
+                    "like one connected eerie, cinematic, factual, curiosity-driven "
+                    "documentary arc, not separate school-report topics.\n\n"
                     "Mandatory top-level factual guardrail fields:\n"
                     "- what_is_known\n"
                     "- what_is_uncertain\n"
@@ -829,11 +1173,18 @@ def create_series_plan(
                     "count. Do not describe Episode 4 as the final episode if episodes=5. "
                     "The final, legacy, or wrap-up episode must always be the last "
                     "requested episode number. Each episode object must include: episode_number, "
-                    "title, episode_topic, story_job, hook, chapter_summary, key_beats, "
-                    "continuity_from_previous, ending_tease, next_episode_setup, "
-                    "suggested_template, suggested_image_count, suggested_thumbnail_angle, "
-                    "suggested_video_format, evidence_focus, avoid_repeating. The final "
-                    "episode must also include final_closing_thought.\n\n"
+                    "title, episode_topic, narrative_purpose, hook, chapter_summary, "
+                    "key_beats, evidence_focus, avoid_repeating, continuity_from_previous, "
+                    "ending_tease, next_episode_setup, suggested_template, "
+                    "suggested_image_count, suggested_thumbnail_angle, suggested_video_format. "
+                    "The final episode must also include final_closing_thought. You may "
+                    "also include story_job as an alias, but narrative_purpose is required.\n\n"
+                    "narrative_purpose must explain the job of the episode in the series. "
+                    "Good examples: Open with the eerie discovery and establish the central "
+                    "mystery; Rewind to the conditions that made the event possible; "
+                    "Separate documented evidence from later exaggeration; Compare the "
+                    "strongest theories without pretending certainty; Leave the viewer "
+                    "with the most honest explanation and the mystery that remains.\n\n"
                     "evidence_focus must be a list of concrete evidence, known facts, "
                     "documents, locations, artifacts, or observations the episode should "
                     "use. Make entries specific to the topic, such as city council response, "
@@ -858,10 +1209,12 @@ def create_series_plan(
                     "repeat the full city background from Episode 2, or Do not treat "
                     "disputed death counts as established fact.\n\n"
                     "Episode planning style:\n"
-                    "- Every episode must have a distinct story_job, reveal something new, "
-                    "avoid repeating prior episodes, and end with a specific reason to continue.\n"
+                    "- Every episode must have a distinct narrative_purpose, reveal something "
+                    "new, avoid repeating prior episodes, and end with a specific reason to continue.\n"
                     "- The whole series must feel like a connected story arc with escalating "
                     "questions, not a list of interchangeable topics.\n"
+                    "- Every episode must be compatible with a 2-3 minute landscape YouTube "
+                    "documentary episode: focused, visual, and specific enough to produce.\n"
                     "- For a 5-episode factual mystery, prefer this structure unless the "
                     "topic demands otherwise: Episode 1 strongest hook and central mystery, "
                     "so the viewer understands why the story matters; Episode 2 pressure, "
@@ -882,9 +1235,10 @@ def create_series_plan(
                     "- Avoid generic titles like The Beginning, The Evidence, The Theories, "
                     "The Legacy, Life Before the Mystery, What Happened, The Clues, The "
                     "Enduring Mystery, or Life Aboard.\n"
-                    "- Avoid sensational titles that overstate uncertainty, such as Dancing "
-                    "Until Dead, The Killer Dance, Everyone Died Dancing, or The Curse "
-                    "That Killed Them.\n"
+                    "- Avoid sensational titles that overstate uncertainty, such as Everyone "
+                    "Died, Dancing Until Dead, The Killer Dance, Everyone Died Dancing, "
+                    "The Curse That Killed Them, The Ship That Shouldn't Exist, or The "
+                    "Lighthouse That Murdered Them.\n"
                     "- Prefer concrete titles like The Town That Couldn't Stop Moving, The "
                     "City Under Pressure, What the Records Actually Say, The Theory That "
                     "Almost Fits, What Still Doesn't Add Up, The Lighthouse Went Silent, "
@@ -912,14 +1266,16 @@ def create_series_plan(
                     "- Each episode should naturally set up the next.\n"
                     "- Chapter summaries must be 150-240 words each, with no markdown "
                     "inside JSON. They must be detailed source material, not final narration "
-                    "scripts. Include a strong opening situation, the episode's main question, "
-                    "what evidence or context the episode uses, how the story escalates, "
-                    "what the viewer learns, and how the episode connects to the next. "
+                    "scripts, and should read like source material for a short documentary "
+                    "episode. Include a strong opening situation, the episode's main question, "
+                    "specific story beats, what evidence or context the episode uses, how "
+                    "the story escalates, what the viewer learns, and how the episode connects "
+                    "to the next. "
                     "Avoid academic phrasing like This episode investigates, Viewers will "
                     "learn, This episode discusses, or explores various factors. Prefer "
                     "story-forward phrasing like The episode opens in, The tension builds "
                     "when, The key turn comes when, and By the end, the viewer understands.\n"
-                    "- key_beats must include 6-9 specific scene-like story beats per episode. "
+                    "- key_beats must include 6-9 specific, concrete, visual story beats per episode. "
                     "Avoid generic beats like Introduction, Discussion, Expert analysis, "
                     "Historical context, Final thoughts, Compare theories, discussion of, "
                     "examination of, reflection on, modern theories of, contemporary society, "
@@ -947,7 +1303,7 @@ def create_series_plan(
                     "- The final episode must summarize what is known, identify the strongest "
                     "explanation if appropriate, explain what remains unknown, avoid repeating "
                     "all prior theories, avoid broad generic sociology language unless tied "
-                    "directly to the story, and end with a memorable factual line.\n"
+                    "directly to the story, and end with a grounded, memorable factual line.\n"
                     "- The final episode must not end vaguely with The mystery remains, The "
                     "legend continues, We may never know, or The story still fascinates us "
                     "today. It must identify the core unresolved tension, such as what the "
@@ -1142,7 +1498,7 @@ def _write_full_story(series_plan, full_story_path):
                 "",
                 f"### Episode {int(episode['episode_number']):02d}: {episode['title']}",
                 "",
-                f"Story job: {episode.get('story_job', '')}",
+                f"Narrative purpose: {episode.get('narrative_purpose', episode.get('story_job', ''))}",
                 "",
                 str(episode.get("chapter_summary", "")).strip(),
                 "",
@@ -1180,8 +1536,8 @@ def _write_chapter(series_plan, episode, chapter_path):
         f"Series: {series_plan['series_title']}",
         f"Episode topic: {episode['episode_topic']}",
         "",
-        "## Story Job",
-        str(episode.get("story_job", "")).strip(),
+        "## Narrative Purpose",
+        str(episode.get("narrative_purpose", episode.get("story_job", ""))).strip(),
         "",
         "## Hook",
         str(episode.get("hook", "")).strip(),
@@ -1238,6 +1594,7 @@ def save_series_plan(series_plan, output_name=None):
     series_bible_path = series_folder / "series_bible.json"
     episode_plan_path = series_folder / "episode_plan.json"
     full_story_path = series_folder / "full_story.md"
+    quality_report_path = series_folder / "quality_report.json"
 
     series_bible = {
         key: value for key, value in series_plan.items() if key != "episode_plan"
@@ -1252,6 +1609,11 @@ def save_series_plan(series_plan, output_name=None):
         encoding="utf-8",
     )
     _write_full_story(series_plan, full_story_path)
+    quality_report = validate_series_plan_quality(series_plan)
+    quality_report_path.write_text(
+        json.dumps(quality_report, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     chapter_paths = []
     for episode in series_plan["episode_plan"]:
@@ -1264,6 +1626,7 @@ def save_series_plan(series_plan, output_name=None):
         "series_bible_path": str(series_bible_path),
         "episode_plan_path": str(episode_plan_path),
         "full_story_path": str(full_story_path),
+        "quality_report_path": str(quality_report_path),
         "chapter_paths": chapter_paths,
     }
 
@@ -1272,6 +1635,11 @@ def load_series_plan(series_folder):
     series_path = Path(series_folder)
     series_bible_path = series_path / "series_bible.json"
     episode_plan_path = series_path / "episode_plan.json"
+
+    if not series_bible_path.exists():
+        raise FileNotFoundError(f"series_bible.json does not exist: {series_bible_path}")
+    if not episode_plan_path.exists():
+        raise FileNotFoundError(f"episode_plan.json does not exist: {episode_plan_path}")
 
     return {
         "series_bible": json.loads(series_bible_path.read_text(encoding="utf-8")),

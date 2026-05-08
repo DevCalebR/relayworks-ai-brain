@@ -21,6 +21,8 @@ from tools.series_planner import (
     get_episode_source,
     load_series_plan,
     save_series_plan,
+    save_quality_report,
+    series_plan_from_loaded,
 )
 from tools.test_audio import create_test_audio
 from tools.text_cleaner import clean_narration_text, ensure_call_to_action
@@ -64,6 +66,7 @@ def parse_args():
             "thumbnail",
             "topic-research",
             "series-plan",
+            "series-check",
             "batch-series",
             "daily-shorts",
             "upload-batch-private",
@@ -230,12 +233,15 @@ def parse_args():
     parser.add_argument(
         "--episodes",
         type=int,
-        default=5,
-        help="Number of episodes to plan when --mode series-plan.",
+        default=None,
+        help=(
+            "Number of episodes to plan when --mode series-plan, or first N "
+            "episodes to use when supported by a series mode."
+        ),
     )
     parser.add_argument(
         "--series-folder",
-        help="Series folder path required when --mode batch-series.",
+        help="Series folder path required when --mode series-check or --mode batch-series.",
     )
     parser.add_argument(
         "--episode",
@@ -252,6 +258,13 @@ def parse_args():
         help=(
             "Continue later Shorts when one fails in "
             "--mode shorts-series-private-upload."
+        ),
+    )
+    parser.add_argument(
+        "--force-batch",
+        action="store_true",
+        help=(
+            "Allow batch-series to run even when quality_report.json is not ready."
         ),
     )
     parser.add_argument(
@@ -319,6 +332,8 @@ def print_series_plan_result(saved_paths):
     print(saved_paths["episode_plan_path"])
     print("\nSaved full story path:")
     print(saved_paths["full_story_path"])
+    print("\nSaved quality report path:")
+    print(saved_paths["quality_report_path"])
     print("\nSaved chapter paths:")
     for chapter_path in saved_paths["chapter_paths"]:
         print(chapter_path)
@@ -366,6 +381,15 @@ def _select_batch_episodes(args, episode_plan):
         selected_episodes = [args.episode]
     elif args.episodes_range:
         selected_episodes = _parse_episodes_range(args.episodes_range)
+    elif args.episodes is not None:
+        if args.episodes <= 0:
+            raise ValueError("--episodes must be greater than 0")
+        selected_episodes = sorted(available_episodes)[: args.episodes]
+        if len(selected_episodes) < args.episodes:
+            raise ValueError(
+                f"Series plan has {len(selected_episodes)} episodes, "
+                f"but --episodes requested {args.episodes}"
+            )
     else:
         selected_episodes = sorted(available_episodes)
 
@@ -466,6 +490,23 @@ def run_batch_series(args):
         raise ValueError("--series-folder is required when --mode batch-series")
 
     loaded_plan = load_series_plan(args.series_folder)
+    series_plan = series_plan_from_loaded(loaded_plan)
+    quality_report, quality_report_path = save_quality_report(
+        series_plan,
+        args.series_folder,
+    )
+    if not quality_report.get("ready_for_batch"):
+        message = (
+            "Series plan is not ready for batch-series. "
+            f"Review {quality_report_path}. Issues: "
+            + "; ".join(quality_report.get("issues", []))
+        )
+        if not args.force_batch:
+            raise RuntimeError(message)
+
+        print("\nWARNING: --force-batch used. Continuing despite quality issues.")
+        print(message)
+
     selected_episodes = _select_batch_episodes(args, loaded_plan["episode_plan"])
     started_at = datetime.now().isoformat(timespec="seconds")
     summary = {
@@ -562,7 +603,7 @@ def _load_or_create_shorts_series(args):
 
     series_plan = create_shorts_series_plan(
         topic=args.topic,
-        episodes=args.episodes,
+        episodes=args.episodes or 5,
         target_duration_seconds=args.target_duration_seconds,
         audience=args.audience,
     )
@@ -589,8 +630,9 @@ def _selected_shorts_episodes(series_folder, episode_count):
 
 def run_shorts_series_private_upload(args):
     _configure_shorts_defaults(args)
+    episode_count = args.episodes or 5
     series_folder = _load_or_create_shorts_series(args)
-    selected_episodes = _selected_shorts_episodes(series_folder, args.episodes)
+    selected_episodes = _selected_shorts_episodes(series_folder, episode_count)
     loaded_plan = load_series_plan(series_folder)
     topic = args.topic or loaded_plan["series_bible"].get("topic")
     summary = {
@@ -725,6 +767,22 @@ def run_shorts_series_private_upload(args):
     print(json.dumps(summary, indent=2))
 
 
+def run_series_check(args):
+    if not args.series_folder:
+        raise ValueError("--series-folder is required when --mode series-check")
+
+    loaded_plan = load_series_plan(args.series_folder)
+    quality_report, quality_report_path = save_quality_report(
+        series_plan_from_loaded(loaded_plan),
+        args.series_folder,
+    )
+    result = {
+        **quality_report,
+        "quality_report_path": quality_report_path,
+    }
+    print(json.dumps(result, indent=2))
+
+
 def main():
     args = parse_args()
     topic = args.topic or DEFAULT_TOPIC
@@ -742,7 +800,7 @@ def main():
     if args.target_duration_seconds <= 0:
         raise ValueError("--target-duration-seconds must be greater than 0")
 
-    if args.episodes <= 0:
+    if args.episodes is not None and args.episodes <= 0:
         raise ValueError("--episodes must be greater than 0")
 
     if args.count <= 0:
@@ -763,12 +821,16 @@ def main():
 
         series_plan = create_series_plan(
             topic=args.topic,
-            episodes=args.episodes,
+            episodes=args.episodes or 5,
             target_duration_seconds=args.target_duration_seconds,
             audience=args.audience,
         )
         saved_paths = save_series_plan(series_plan)
         print_series_plan_result(saved_paths)
+        return
+
+    if args.mode == "series-check":
+        run_series_check(args)
         return
 
     if args.mode == "batch-series":
