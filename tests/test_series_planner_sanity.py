@@ -1,10 +1,17 @@
+import json
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
+from tools import series_planner
 from tools.series_planner import (
     DEFAULT_SUGGESTED_IMAGE_COUNT,
     DEFAULT_SUGGESTED_VIDEO_FORMAT,
     _normalize_series_plan,
     _validate_series_plan,
+    save_series_plan,
+    validate_series_plan_quality,
 )
 
 
@@ -326,6 +333,85 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             normalized["episode_plan"][-1]["final_closing_thought"],
         )
         _validate_series_plan(normalized, expected_episodes=5)
+
+    def test_quality_validation_flags_weak_series_plan(self):
+        plan = _base_plan(
+            _base_episode(
+                title="The Evidence",
+                hook="What really happened?",
+                evidence_focus=["experts say the records show a mystery"],
+                key_beats=["Historical context", "Expert opinions"],
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("generic title" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+        self.assertTrue(
+            any("weak hook" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+        self.assertTrue(
+            any("fake-source" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
+    def test_quality_validation_normalizes_unsupported_values_for_review(self):
+        plan = _base_plan(
+            _base_episode(
+                suggested_template="mystery_build-up",
+                suggested_video_format="cinematic",
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertEqual(plan["episode_plan"][0]["suggested_template"], "ai")
+        self.assertEqual(plan["episode_plan"][0]["suggested_video_format"], "landscape")
+        self.assertTrue(report["warnings"])
+
+    def test_save_series_plan_writes_quality_report(self):
+        plan = _base_plan(
+            _base_episode(
+                hook=(
+                    "When the relief crew reached the lighthouse, the lamps were dark, "
+                    "the keepers were gone, and the sea had left almost no answers behind."
+                ),
+                chapter_summary=(
+                    "The episode opens with the relief crew arriving at the lighthouse "
+                    "and finding the keepers missing. The story stays grounded in the "
+                    "documented disappearance, the isolated location, and the careful "
+                    "limits of what the record can prove. The tension builds around what "
+                    "was found, what was not found, and why later retellings made the case "
+                    "sound cleaner than the evidence allows."
+                ),
+            )
+        )
+        plan["series_narrative_arc"] = (
+            "The mystery begins with the silent lighthouse, escalates through the "
+            "limited record and later retellings, keeps tension around what can be "
+            "proved versus what people repeated, and ends by naming what the official "
+            "record still cannot explain."
+        )
+        normalized = _normalize_series_plan(plan)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.object(series_planner, "SERIES_OUTPUT_DIR", Path(temp_dir)):
+                saved_paths = save_series_plan(normalized)
+
+            quality_path = Path(saved_paths["quality_report_path"])
+            self.assertTrue(quality_path.exists())
+            report = json.loads(quality_path.read_text(encoding="utf-8"))
+
+        self.assertIn("ready_for_batch", report)
+        self.assertIn("issues", report)
+        self.assertIn("warnings", report)
+        self.assertIn("suggestions", report)
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ The pipeline currently supports these CLI modes:
 - `daily-shorts`: generates a high-volume daily batch of vertical Shorts packages under `outputs/daily_batches/`.
 - `upload-batch-private`: uploads passed Shorts from a daily batch as private videos only.
 - `series-plan`: generates a reusable series bible, episode plan, full story, and chapter source files.
+- `series-check`: validates a saved series plan and updates `quality_report.json` without calling generation APIs.
 - `batch-series`: generates selected episodes from a saved series plan using the existing full video pipeline.
 - `shorts-series-private-upload`: creates or uses a Shorts-focused series plan, generates each vertical Short, validates each organized run folder, and uploads each Short privately.
 - `upload-check`: validates an organized run folder before upload.
@@ -53,10 +54,11 @@ Common options:
 - `--ignore-topic-history`: allows `daily-shorts` to reuse previous topics by skipping local topic history checks.
 - `--batch-folder`: points `upload-batch-private` to a folder under `outputs/daily_batches/`.
 - `--limit`: limits how many passed Shorts `upload-batch-private` uploads.
-- `--episodes`: controls how many episodes to create in `series-plan` mode.
-- `--series-folder`: points `batch-series` to a saved folder under `outputs/series/`.
+- `--episodes`: controls how many episodes to create in `series-plan` mode, or the first N episodes to use when supported by a series mode.
+- `--series-folder`: points `series-check` or `batch-series` to a saved folder under `outputs/series/`.
 - `--episode`: generates one episode from a saved series plan.
 - `--episodes-range`: generates an inclusive episode range from a saved series plan, such as `1-5`.
+- `--force-batch`: allows `batch-series` to run even when `quality_report.json` is not ready.
 - `--continue-on-error`: keeps processing later Shorts in `shorts-series-private-upload` if one Short fails. Default behavior stops on the first error.
 
 The default topic is:
@@ -271,18 +273,30 @@ Generate a reusable series plan:
 
 ```bash
 python main.py --mode series-plan \
-  --topic "The Mary Celeste" \
+  --topic "The Flannan Isles Lighthouse Mystery" \
   --episodes 5 \
-  --target-duration-seconds 150
+  --target-duration-seconds 150 \
+  --audience "fans of weird history and strange true stories"
 ```
 
-`series-plan` is intended to create episode-ready story plans, not just file structure. It writes a series bible, full story arc, episode plan, and chapter source files with hooks, story jobs, concrete topic-specific evidence focus, avoid-repeating notes, factual guardrails, ending teases, and final closing thoughts for 2-3 minute mystery/history episodes. Generated factual plans should still be reviewed before `batch-series`, especially when the topic includes disputed records, later retellings, uncertain causes, death counts, or folklore.
+`series-plan` is intended to create episode-ready story plans, not just file structure. The current primary format is 2-3 minute landscape YouTube episodes for serialized weird-history, mystery, scary factual story, dark history, strange historical event, and eerie true story channels. This differs from Shorts: each episode needs a connected documentary arc, a clear narrative purpose, concrete evidence focus, continuity from the previous episode, and a specific reason to continue.
+
+It writes a series bible, full story arc, episode plan, chapter source files, and `quality_report.json` with hooks, narrative purposes, concrete topic-specific evidence focus, avoid-repeating notes, factual guardrails, ending teases, and final closing thoughts. Generated factual plans should be reviewed before `batch-series`, especially when the topic includes disputed records, later retellings, uncertain causes, death counts, folklore, or evidence that is easy to overstate.
+
+Check a saved plan without spending API credits:
+
+```bash
+python main.py --mode series-check \
+  --series-folder outputs/series/<series-folder-name>
+```
+
+`series-check` loads `series_bible.json` and `episode_plan.json`, updates `quality_report.json`, and prints the report as JSON. It does not call OpenAI, ElevenLabs, image generation, video generation, YouTube, or upload anything. Do not run `batch-series` until `quality_report.json` says `ready_for_batch` is `true`.
 
 Generate selected episodes from a saved series plan:
 
 ```bash
 python main.py --mode batch-series \
-  --series-folder outputs/series/the-mary-celeste \
+  --series-folder outputs/series/<series-folder-name> \
   --episodes-range 1-5 \
   --template ai \
   --organize \
@@ -293,7 +307,18 @@ python main.py --mode batch-series \
   --video-format landscape
 ```
 
-`batch-series` does not upload to YouTube by default and does not call the upload mode. It writes local assets, can organize each episode into a run folder, and runs `upload-check` only for organized run folders.
+`batch-series` now checks `quality_report.json` or regenerates the report before producing episodes. If `ready_for_batch` is `false`, it fails before spending generation credits. Fix weak titles, vague evidence, missing hooks, repeated episodes, unsupported templates, unsupported video formats, or weak narrative purposes before running batch generation.
+
+Force a batch only when intentionally overriding the quality gate:
+
+```bash
+python main.py --mode batch-series \
+  --series-folder outputs/series/<series-folder-name> \
+  --episodes 1 \
+  --force-batch
+```
+
+`--force-batch` prints a warning and continues. Use it only when you have manually reviewed the issues and still want to spend credits. `batch-series` does not upload to YouTube by default and does not call the upload mode. It writes local assets, can organize each episode into a run folder, and runs `upload-check` only for organized run folders.
 
 Create and privately upload a complete 5-video Shorts series:
 
@@ -396,20 +421,24 @@ After upload, review the video in YouTube Studio before publishing. Private uplo
 The reusable series flow is:
 
 1. Generate a series plan with `--mode series-plan`.
-2. Review the generated series bible, episode plan, full story, and chapter files under `outputs/series/<series-slug>/`.
-3. Generate selected episodes with `--mode batch-series`.
-4. Review `upload-check` results for organized run folders.
-5. Manually upload private videos after review.
+2. Review the generated series bible, episode plan, full story, chapter files, and `quality_report.json` under `outputs/series/<series-slug>/`.
+3. Run `--mode series-check` after edits to update `quality_report.json`.
+4. Generate selected episodes with `--mode batch-series` only when `ready_for_batch` is `true`.
+5. Review `upload-check` results for organized run folders.
+6. Manually upload private videos after review.
 
-Factual series plans should still get human review before `batch-series`, especially for dates, names, locations, and unresolved theories. `series-plan` includes topic-containment guardrails to avoid unsupported templates, generic episode arcs, repeated episode coverage, overstated evidence, and cross-contaminated details from unrelated famous cases, but generated plans may still require factual review before production.
+Factual series plans should still get human review before `batch-series`, especially for dates, names, locations, and unresolved theories. `series-plan` includes topic-containment guardrails to avoid unsupported templates, generic episode arcs, repeated episode coverage, overstated evidence, and cross-contaminated details from unrelated famous cases, but generated plans may still require factual review before production. Do not run `batch-series` until `quality_report.json` says `ready_for_batch` is `true`.
 
 `series-plan` creates:
 
 - `series_bible.json`
 - `episode_plan.json`
 - `full_story.md`
+- `quality_report.json`
 - `chapters/episode-XX.md`
 - `episodes/` for generated per-episode records
+
+`quality_report.json` is a local readiness report with `ready_for_batch`, issues, warnings, and suggestions. It checks for missing fields, unsupported templates, unsupported video formats, generic or overclaiming titles, repeated episode coverage, vague fake-source language, weak hooks, missing ending teases, and missing narrative purposes.
 
 `batch-series` writes batch summaries under `outputs/batches/` and writes per-episode records under `outputs/series/<series-slug>/episodes/episode-XX.json`. Generated series folders and batch summary JSON files are ignored by Git. Keep only `.gitkeep` files tracked in those folders.
 
