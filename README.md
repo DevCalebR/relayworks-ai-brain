@@ -29,6 +29,7 @@ The pipeline currently supports these CLI modes:
 Common options:
 
 - `--template`: selects the local video style template.
+- `--script-path`: uses a local `.txt` or `.md` narration script instead of generating a script with OpenAI.
 - `--video-format`: selects `landscape` for normal YouTube episode videos or `vertical` for Shorts-style videos. Default: `landscape`.
 - `--target-duration-seconds`: controls the target spoken script duration for generated scripts. Default: `150`.
 - `--caption-offset`: adjusts generated caption timing in `full` mode.
@@ -132,6 +133,14 @@ Generate a script:
 python main.py --mode script
 ```
 
+Save a manually written script through the normal script output flow:
+
+```bash
+python main.py --mode script \
+  --script-path scripts/sodder-children-longform.txt \
+  --topic "The Disappearance of the Sodder Children"
+```
+
 Generate captions:
 
 ```bash
@@ -174,6 +183,27 @@ Generate a complete organized run with AI scene images:
 python main.py --mode full --topic "The Lost Colony of Roanoke Episode 1: The Village That Vanished" --template ai --organize --use-ai-images --image-count 12 --generate-thumbnail --target-duration-seconds 150 --video-format landscape
 ```
 
+Generate a long-form documentary run from a manually written script:
+
+```bash
+python main.py --mode full \
+  --script-path scripts/sodder-children-longform.txt \
+  --topic "The Disappearance of the Sodder Children" \
+  --template ai \
+  --organize \
+  --use-ai-images \
+  --image-count 60 \
+  --generate-thumbnail \
+  --target-duration-seconds 900 \
+  --video-format landscape
+```
+
+Check the newest organized run before upload:
+
+```bash
+python main.py --mode upload-check --run-folder "$(ls -td outputs/runs/*/ | head -1)"
+```
+
 Generate a local thumbnail only:
 
 ```bash
@@ -199,6 +229,14 @@ python main.py --mode topic-research --niche "weird history mysteries" --audienc
 ```
 
 Topic research uses OpenAI only. It does not call YouTube APIs, scrape the web, use YouTube trend data, or use analytics feedback yet. Generated topic research JSON files are saved under `outputs/topics/` and should not be committed.
+
+## Manual Script Workflow
+
+Use `--script-path` when you already have a finished narration script. Supported file types are `.txt` and `.md`, read as UTF-8. When `--script-path` is provided in `script`, `captions`, `metadata`, `voiceover`, or `full` mode, the pipeline uses that file instead of calling OpenAI for script generation.
+
+If `--topic` is provided, it is still used for output naming, metadata, thumbnails, and video titles. If `--topic` is omitted, the topic is derived from the script filename, such as `scripts/sodder-children-longform.txt` becoming `Sodder Children Longform`.
+
+`--script-path` only skips OpenAI script generation. Full mode can still use OpenAI image generation when `--use-ai-images` is enabled, and voiceover mode still uses ElevenLabs audio generation.
 
 ## Daily Shorts Production
 

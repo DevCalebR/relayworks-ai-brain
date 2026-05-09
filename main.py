@@ -1,5 +1,6 @@
 import argparse
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from tools.image_inputs import collect_image_paths
 from tools.logger import log_pipeline_run
 from tools.metadata import save_video_metadata
 from tools.run_folder import organize_run_outputs
+from tools.script_reader import read_script_file
 from tools.series_planner import (
     create_series_plan,
     create_shorts_series_plan,
@@ -79,6 +81,13 @@ def parse_args():
         "--topic",
         default=None,
         help="Topic to use for script generation or video title.",
+    )
+    parser.add_argument(
+        "--script-path",
+        help=(
+            "Optional local .txt or .md narration script to use instead of "
+            "generating a script with OpenAI."
+        ),
     )
     parser.add_argument(
         "--target-duration-seconds",
@@ -294,6 +303,13 @@ def log_success(topic, mode, outputs, organize=False):
 
     print("\nLogged pipeline run:")
     print(log_entry)
+
+
+def _topic_from_script_path(script_path):
+    stem = Path(script_path).expanduser().stem
+    topic = re.sub(r"[-_]+", " ", stem)
+    topic = re.sub(r"\s+", " ", topic).strip()
+    return topic.title() or DEFAULT_TOPIC
 
 
 def print_topic_research(topics, saved_path):
@@ -785,7 +801,16 @@ def run_series_check(args):
 
 def main():
     args = parse_args()
-    topic = args.topic or DEFAULT_TOPIC
+    source_script = None
+    source_script_path = None
+
+    if args.script_path:
+        source_script = read_script_file(args.script_path)
+        source_script_path = str(Path(args.script_path).expanduser().resolve())
+
+    topic = args.topic or (
+        _topic_from_script_path(args.script_path) if args.script_path else DEFAULT_TOPIC
+    )
     image_paths = []
 
     if args.image_count <= 0:
@@ -974,18 +999,24 @@ def main():
         log_success(topic, args.mode, outputs, args.organize)
         return
 
-    script = generate_script(
-        topic,
-        target_duration_seconds=args.target_duration_seconds,
-    )
+    if source_script is None:
+        script = generate_script(
+            topic,
+            target_duration_seconds=args.target_duration_seconds,
+        )
+    else:
+        script = source_script
 
     narration_text = ensure_call_to_action(clean_narration_text(script))
 
     script_path = save_script(topic, script)
     outputs = {"script": script_path}
 
+    if source_script_path:
+        outputs["source_script_path"] = source_script_path
+
     if args.mode in ["full", "script"]:
-        print("\nGenerated Script:")
+        print("\nProvided Script:" if source_script_path else "\nGenerated Script:")
         print(script)
 
     print("\nSaved script path:")
