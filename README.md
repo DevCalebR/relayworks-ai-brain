@@ -440,6 +440,8 @@ Factual series plans should still get human review before `batch-series`, especi
 
 `quality_report.json` is a local readiness report with `ready_for_batch`, issues, warnings, and suggestions. It checks for missing fields, unsupported templates, unsupported video formats, generic or overclaiming titles, repeated episode coverage, vague fake-source language, weak hooks, missing ending teases, and missing narrative purposes.
 
+Final episodes still need an `ending_tease`; it should point to the lingering mystery or unresolved factual tension rather than another episode.
+
 `batch-series` writes batch summaries under `outputs/batches/` and writes per-episode records under `outputs/series/<series-slug>/episodes/episode-XX.json`. Generated series folders and batch summary JSON files are ignored by Git. Keep only `.gitkeep` files tracked in those folders.
 
 ## Upload Readiness Checks

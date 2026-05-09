@@ -135,15 +135,25 @@ VAGUE_SOURCE_PHRASES = {
     "unnamed sources",
 }
 VAGUE_BEAT_PHRASES = {
-    "historical context",
+    "analysis",
+    "background",
+    "context",
+    "discussion",
+    "evidence",
     "expert opinions",
-    "possible theories",
+    "historical context",
     "legacy",
     "introduction",
-    "discussion",
+    "overview",
+    "possible theories",
+    "theories",
     "expert analysis",
     "final thoughts",
 }
+FINAL_NEXT_EPISODE_SETUP = (
+    "Series conclusion: leave viewers with the strongest grounded explanation and "
+    "the mystery that remains."
+)
 SUSPICIOUS_TOPIC_TERMS = {
     "cryptic notes",
     "empty ship",
@@ -368,6 +378,49 @@ def _normalize_video_format(value):
     if video_format in VALID_VIDEO_FORMATS:
         return video_format
     return DEFAULT_SUGGESTED_VIDEO_FORMAT
+
+
+def _topic_label(series_plan):
+    return str(
+        series_plan.get("topic")
+        or series_plan.get("series_title")
+        or "the mystery"
+    ).strip()
+
+
+def _episode_label(series_plan, episode, episode_number=None):
+    episode_number = episode_number or episode.get("episode_number")
+    fallback = f"Episode {episode_number}" if episode_number else _topic_label(series_plan)
+    return str(episode.get("title") or episode.get("episode_topic") or fallback).strip()
+
+
+def _default_thumbnail_angle(series_plan, episode, episode_number=None):
+    title = _episode_label(series_plan, episode, episode_number)
+    topic = _topic_label(series_plan)
+    return f"Moody documentary thumbnail showing {title} from {topic}."
+
+
+def _default_lingering_tease(series_plan, episode):
+    topic = _topic_label(series_plan)
+    title = _episode_label(series_plan, episode)
+    return (
+        f"Even after {title}, {topic} still leaves one grounded question the "
+        "record cannot fully close."
+    )
+
+
+def _default_next_episode_setup(series_plan, episode_plan, index):
+    episode = episode_plan[index]
+    if index + 1 >= len(episode_plan):
+        return FINAL_NEXT_EPISODE_SETUP
+
+    next_episode = episode_plan[index + 1]
+    next_title = _episode_label(
+        series_plan,
+        next_episode,
+        episode_number=index + 2,
+    )
+    return f"Next episode: turn from {episode.get('title', 'this chapter')} to {next_title}."
 
 
 def _set_default_if_missing(target, key, value):
@@ -669,6 +722,7 @@ def _normalize_series_plan(
 
     series_plan = _normalize_episode_defaults(series_plan)
     series_plan = _normalize_episode_numbers(series_plan, expected_for_numbering)
+    series_plan = _normalize_episode_plan(series_plan)
     return _normalize_episode_topic_containment(series_plan)
 
 
@@ -755,6 +809,112 @@ def _normalize_episode_defaults(series_plan):
                 episode.get("final_closing_thought")
                 or _default_final_closing_thought(series_plan)
             )
+
+    return series_plan
+
+
+def _normalize_episode_plan(series_plan):
+    episode_plan = series_plan.get("episode_plan")
+    if not isinstance(episode_plan, list):
+        return series_plan
+
+    episode_count = _parse_positive_int(series_plan.get("episode_count")) or len(episode_plan)
+    for index, episode in enumerate(episode_plan):
+        if not isinstance(episode, dict):
+            continue
+
+        episode_number = _parse_positive_int(episode.get("episode_number")) or index + 1
+        episode["episode_number"] = episode_number
+
+        _set_default_if_missing(
+            episode,
+            "title",
+            f"Episode {episode_number}: {_topic_label(series_plan)}",
+        )
+        _set_default_if_missing(episode, "episode_topic", episode["title"])
+        _set_default_if_missing(
+            episode,
+            "hook",
+            (
+                f"The story of {episode['episode_topic']} begins with a detail "
+                "that refuses to fit neatly into the surviving record."
+            ),
+        )
+
+        default_story_job = (
+            _default_story_job(episode_number, episode_count)
+            or "Advance the serialized story with new evidence, context, or tension."
+        )
+        _set_default_if_missing(episode, "narrative_purpose", default_story_job)
+        _set_default_if_missing(episode, "story_job", episode["narrative_purpose"])
+        _set_default_if_missing(
+            episode,
+            "chapter_summary",
+            (
+                f"This episode focuses on {episode['episode_topic']} with careful "
+                "attention to what the record can support and what should remain uncertain."
+            ),
+        )
+
+        episode["key_beats"] = _normalize_list(episode.get("key_beats"))
+        episode["evidence_focus"] = _normalize_list(
+            episode.get("evidence_focus"),
+            "No concrete evidence specified; treat this episode as interpretive and avoid overclaiming.",
+        )
+        avoid_repeating = _normalize_list(episode.get("avoid_repeating"))
+        if not avoid_repeating:
+            avoid_repeating = [
+                "Do not repeat earlier episode setup except in a brief reminder."
+                if index > 0
+                else "Do not repeat this opening setup in full in later episodes."
+            ]
+        episode["avoid_repeating"] = avoid_repeating
+
+        if index == 0:
+            _set_default_if_missing(
+                episode,
+                "continuity_from_previous",
+                "Series opener: begin with the central mystery without requiring previous context.",
+            )
+        else:
+            previous_title = _episode_label(
+                series_plan,
+                episode_plan[index - 1],
+                episode_number=index,
+            )
+            _set_default_if_missing(
+                episode,
+                "continuity_from_previous",
+                f"Continue from {previous_title} without re-explaining the full setup.",
+            )
+
+        _set_default_if_missing(
+            episode,
+            "ending_tease",
+            _default_lingering_tease(series_plan, episode)
+            if index == len(episode_plan) - 1
+            else _default_next_episode_setup(series_plan, episode_plan, index),
+        )
+        _set_default_if_missing(
+            episode,
+            "next_episode_setup",
+            _default_next_episode_setup(series_plan, episode_plan, index),
+        )
+        _set_default_if_missing(
+            episode,
+            "suggested_thumbnail_angle",
+            _default_thumbnail_angle(series_plan, episode, episode_number),
+        )
+
+        episode["suggested_template"] = _normalize_template(
+            episode.get("suggested_template")
+        )
+        episode["suggested_image_count"] = _normalize_image_count(
+            episode.get("suggested_image_count")
+        )
+        episode["suggested_video_format"] = _normalize_video_format(
+            episode.get("suggested_video_format")
+        )
 
     return series_plan
 
@@ -853,6 +1013,28 @@ def _is_weak_hook(hook):
     if hook_text.endswith("?") and len(hook_text.split()) <= 8:
         return True
     return False
+
+
+def _vague_key_beat_reason(key_beat):
+    normalized = _simple_text_key(key_beat)
+    if not normalized:
+        return "empty"
+
+    if normalized in VAGUE_BEAT_PHRASES:
+        return normalized
+
+    words = normalized.split()
+    if len(words) <= 3:
+        for phrase in VAGUE_BEAT_PHRASES:
+            if phrase in normalized:
+                return phrase
+
+    vague_starts = ("discussion of", "analysis of", "overview of", "context for")
+    for phrase in vague_starts:
+        if normalized.startswith(phrase):
+            return phrase
+
+    return None
 
 
 def _episode_quality_text(episode):
@@ -1003,8 +1185,9 @@ def validate_series_plan_quality(series_plan):
                     "Name the category of evidence carefully or label the detail as disputed.",
                 )
 
-        for phrase in VAGUE_BEAT_PHRASES:
-            if phrase in _simple_text_key(episode.get("key_beats", [])):
+        for key_beat in _normalize_list(episode.get("key_beats")):
+            phrase = _vague_key_beat_reason(key_beat)
+            if phrase:
                 issue(
                     f"Episode {episode_number} has vague key beat wording: {phrase}.",
                     "Replace broad labels with concrete, visual story beats.",
@@ -1178,7 +1361,10 @@ def create_series_plan(
                     "ending_tease, next_episode_setup, suggested_template, "
                     "suggested_image_count, suggested_thumbnail_angle, suggested_video_format. "
                     "The final episode must also include final_closing_thought. You may "
-                    "also include story_job as an alias, but narrative_purpose is required.\n\n"
+                    "also include story_job as an alias, but narrative_purpose is required. "
+                    "No episode may omit ending_tease, next_episode_setup, or "
+                    "suggested_thumbnail_angle. Do not leave any required field blank, "
+                    "empty, null, or placeholder-like.\n\n"
                     "narrative_purpose must explain the job of the episode in the series. "
                     "Good examples: Open with the eerie discovery and establish the central "
                     "mystery; Rewind to the conditions that made the event possible; "
@@ -1275,15 +1461,20 @@ def create_series_plan(
                     "learn, This episode discusses, or explores various factors. Prefer "
                     "story-forward phrasing like The episode opens in, The tension builds "
                     "when, The key turn comes when, and By the end, the viewer understands.\n"
-                    "- key_beats must include 6-9 specific, concrete, visual story beats per episode. "
-                    "Avoid generic beats like Introduction, Discussion, Expert analysis, "
-                    "Historical context, Final thoughts, Compare theories, discussion of, "
-                    "examination of, reflection on, modern theories of, contemporary society, "
-                    "or expert commentary. Use concrete beats that can become scenes, such "
-                    "as The records narrow the story but refuse to close it, The most famous "
-                    "theory explains the pressure but not the first spark, Later folklore "
-                    "turns a civic crisis into a legend, or The final question shifts from "
-                    "what happened to why this story survived.\n"
+                    "- key_beats must include 6-9 specific, concrete, visual story moments per episode. "
+                    "Reject vague key beats like discussion, possible theories, evidence, "
+                    "context, background, overview, analysis, expert opinions, legacy, "
+                    "or theories. Avoid generic beats like Introduction, Discussion, "
+                    "Expert analysis, Historical context, Final thoughts, Compare theories, "
+                    "discussion of, examination of, reflection on, modern theories of, "
+                    "contemporary society, or expert commentary. Use concrete beats that "
+                    "can become scenes, such as the relief vessel approaches the dark "
+                    "lighthouse, the first keeper steps inside and finds the living quarters "
+                    "empty, the missing oilskins raise questions about whether the men went "
+                    "outside, the damaged west landing suggests the sea may have reached "
+                    "higher than expected, later retellings turn uncertain details into "
+                    "legend, or the strongest theory explains one clue but leaves another "
+                    "unresolved.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
                     "teases like What happened next, The mystery continues, More questions "
                     "remain, The legend continues, or The mystery remains. Do not use "
@@ -1294,10 +1485,15 @@ def create_series_plan(
                     "have to ask what the records actually say and what they leave out, or "
                     "The most famous explanation sounds convincing at first, until one detail "
                     "gets in the way.\n"
-                    "- The final episode does not need a next_episode_setup. Its ending_tease "
-                    "may be empty or null. But it must include final_closing_thought: one "
-                    "memorable, factual, eerie closing idea that names the unresolved core "
-                    "tension. Bad finale: The mystery continues to fascinate people today. "
+                    "- The final episode still must include ending_tease, next_episode_setup, "
+                    "and suggested_thumbnail_angle. The final ending_tease should tease the "
+                    "lingering mystery or unresolved factual tension, not another episode. "
+                    "The final next_episode_setup can be a natural series wrap-up line, such "
+                    "as Series conclusion: leave viewers with the strongest grounded "
+                    "explanation and the mystery that remains. It must include "
+                    "final_closing_thought: one memorable, factual, eerie closing idea that "
+                    "names the unresolved core tension. Bad finale: The mystery continues "
+                    "to fascinate people today. "
                     "Better finale: The records can tell us what Strasbourg feared. They "
                     "still cannot tell us exactly what made the dancing begin.\n"
                     "- The final episode must summarize what is known, identify the strongest "

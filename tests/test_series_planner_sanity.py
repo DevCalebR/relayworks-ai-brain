@@ -340,7 +340,7 @@ class SeriesPlannerSanityTests(unittest.TestCase):
                 title="The Evidence",
                 hook="What really happened?",
                 evidence_focus=["experts say the records show a mystery"],
-                key_beats=["Historical context", "Expert opinions"],
+                key_beats=["discussion", "Expert opinions"],
             )
         )
 
@@ -359,6 +359,10 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             any("fake-source" in issue for issue in report["issues"]),
             report["issues"],
         )
+        self.assertTrue(
+            any("vague key beat wording: discussion" in issue for issue in report["issues"]),
+            report["issues"],
+        )
 
     def test_quality_validation_normalizes_unsupported_values_for_review(self):
         plan = _base_plan(
@@ -374,6 +378,91 @@ class SeriesPlannerSanityTests(unittest.TestCase):
         self.assertEqual(plan["episode_plan"][0]["suggested_template"], "ai")
         self.assertEqual(plan["episode_plan"][0]["suggested_video_format"], "landscape")
         self.assertTrue(report["warnings"])
+
+    def test_missing_final_episode_fields_are_normalized(self):
+        plan = _base_plan(_base_episode())
+        plan["episode_count"] = 2
+        plan["episode_plan"] = _episode_list(2)
+        final_episode = plan["episode_plan"][-1]
+        del final_episode["ending_tease"]
+        del final_episode["next_episode_setup"]
+        del final_episode["suggested_thumbnail_angle"]
+
+        normalized = _normalize_series_plan(plan, episodes=2)
+        normalized_final = normalized["episode_plan"][-1]
+
+        self.assertTrue(normalized_final["ending_tease"])
+        self.assertIn("still leaves", normalized_final["ending_tease"])
+        self.assertEqual(
+            normalized_final["next_episode_setup"],
+            "Series conclusion: leave viewers with the strongest grounded explanation and the mystery that remains.",
+        )
+        self.assertTrue(normalized_final["suggested_thumbnail_angle"])
+
+    def test_quality_validation_flags_missing_final_ending_tease(self):
+        plan = _base_plan(_base_episode())
+        del plan["episode_plan"][0]["ending_tease"]
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("missing required field: ending_tease" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
+    def test_final_episode_can_pass_with_fallback_style_next_setup(self):
+        plan = _base_plan(
+            _base_episode(
+                hook=(
+                    "When the relief crew reached the lighthouse, the lamps were dark, "
+                    "the keepers were gone, and the sea had left almost no answers behind."
+                ),
+                chapter_summary=(
+                    "The episode opens with the relief crew arriving at the lighthouse "
+                    "and finding the keepers missing. The story stays with the documented "
+                    "disappearance, the isolated location, the limited record, and the "
+                    "careful difference between what was found and what later retellings "
+                    "made more dramatic."
+                ),
+                key_beats=[
+                    "The relief vessel approaches the dark lighthouse.",
+                    "The first keeper steps inside and finds the living quarters empty.",
+                    "The missing oilskins raise questions about whether the men went outside.",
+                    "The damaged west landing suggests the sea may have reached higher than expected.",
+                    "Later retellings turn uncertain details into legend.",
+                    "The strongest theory explains one clue but leaves another unresolved.",
+                ],
+                narrative_purpose=(
+                    "Close with the strongest grounded explanation and the question "
+                    "the surviving record still cannot answer."
+                ),
+                avoid_repeating=[
+                    "Do not repeat the full discovery setup except in one sentence.",
+                ],
+                continuity_from_previous="Series opener: begin with the central mystery.",
+                ending_tease=(
+                    "Even after the strongest explanation, the lighthouse still leaves "
+                    "one question the surviving record cannot close."
+                ),
+                next_episode_setup=(
+                    "Series conclusion: leave viewers with the strongest grounded "
+                    "explanation and the mystery that remains."
+                ),
+                suggested_thumbnail_angle="Dark lighthouse over a violent sea.",
+            )
+        )
+        plan["series_narrative_arc"] = (
+            "The mystery begins with the relief vessel reaching a silent lighthouse, "
+            "then escalates through the empty rooms, the weather-damaged landing, and "
+            "the limited official record. The central tension is what the physical clues "
+            "can explain versus what later retellings turned into legend, ending with "
+            "the strongest grounded theory and the question that remains unknown."
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertTrue(report["ready_for_batch"], report["issues"])
 
     def test_save_series_plan_writes_quality_report(self):
         plan = _base_plan(
