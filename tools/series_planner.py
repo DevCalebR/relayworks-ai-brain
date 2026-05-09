@@ -136,19 +136,36 @@ VAGUE_SOURCE_PHRASES = {
 }
 VAGUE_BEAT_PHRASES = {
     "analysis",
+    "analysis of",
     "background",
     "context",
     "discussion",
+    "discussion of",
     "evidence",
     "expert opinions",
+    "examination of",
+    "exploration of",
     "historical context",
+    "implications",
+    "implications of",
+    "investigation of",
     "legacy",
     "introduction",
     "overview",
+    "overview of",
     "possible theories",
     "theories",
     "expert analysis",
     "final thoughts",
+}
+VAGUE_BEAT_ACADEMIC_PHRASES = {
+    "analysis of",
+    "discussion of",
+    "examination of",
+    "exploration of",
+    "overview of",
+    "investigation of",
+    "implications of",
 }
 FINAL_NEXT_EPISODE_SETUP = (
     "Series conclusion: leave viewers with the strongest grounded explanation and "
@@ -1020,6 +1037,10 @@ def _vague_key_beat_reason(key_beat):
     if not normalized:
         return "empty"
 
+    for phrase in VAGUE_BEAT_ACADEMIC_PHRASES:
+        if phrase in normalized:
+            return phrase
+
     if normalized in VAGUE_BEAT_PHRASES:
         return normalized
 
@@ -1029,7 +1050,7 @@ def _vague_key_beat_reason(key_beat):
             if phrase in normalized:
                 return phrase
 
-    vague_starts = ("discussion of", "analysis of", "overview of", "context for")
+    vague_starts = ("context for",)
     for phrase in vague_starts:
         if normalized.startswith(phrase):
             return phrase
@@ -1464,15 +1485,16 @@ def create_series_plan(
                     "- key_beats must include 6-9 specific, concrete, visual story moments per episode. "
                     "Reject vague key beats like discussion, possible theories, evidence, "
                     "context, background, overview, analysis, expert opinions, legacy, "
-                    "or theories. Avoid generic beats like Introduction, Discussion, "
-                    "Expert analysis, Historical context, Final thoughts, Compare theories, "
-                    "discussion of, examination of, reflection on, modern theories of, "
-                    "contemporary society, or expert commentary. Use concrete beats that "
-                    "can become scenes, such as the relief vessel approaches the dark "
-                    "lighthouse, the first keeper steps inside and finds the living quarters "
-                    "empty, the missing oilskins raise questions about whether the men went "
-                    "outside, the damaged west landing suggests the sea may have reached "
-                    "higher than expected, later retellings turn uncertain details into "
+                    "implications, or theories. Do not use academic phrases such as "
+                    "analysis of, discussion of, exploration of, overview of, examination "
+                    "of, investigation of, possible theories, implications of, reflection "
+                    "on, modern theories of, contemporary society, or expert commentary. "
+                    "Use concrete beats that can become scenes, such as the relief vessel "
+                    "approaches the dark lighthouse, the first man steps inside and finds "
+                    "the rooms empty, the missing oilskins raise questions about whether "
+                    "the keepers went outside, the damaged landing suggests the sea may "
+                    "have reached higher than expected, the logbook entries make the final "
+                    "days feel more confusing, later retellings turn uncertain details into "
                     "legend, or the strongest theory explains one clue but leaves another "
                     "unresolved.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
