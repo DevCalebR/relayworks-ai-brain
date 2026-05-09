@@ -364,6 +364,21 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             report["issues"],
         )
 
+    def test_quality_validation_flags_analysis_of_key_beat(self):
+        plan = _base_plan(
+            _base_episode(
+                key_beats=["Analysis of the logbook entries and weather clues."],
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("vague key beat wording: analysis of" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
     def test_quality_validation_normalizes_unsupported_values_for_review(self):
         plan = _base_plan(
             _base_episode(
@@ -458,6 +473,47 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             "the limited official record. The central tension is what the physical clues "
             "can explain versus what later retellings turned into legend, ending with "
             "the strongest grounded theory and the question that remains unknown."
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertTrue(report["ready_for_batch"], report["issues"])
+
+    def test_concrete_visual_key_beats_pass_quality_check(self):
+        plan = _base_plan(
+            _base_episode(
+                hook=(
+                    "When the relief crew reached the lighthouse, the lamps were dark, "
+                    "the keepers were gone, and the sea had left almost no answers behind."
+                ),
+                chapter_summary=(
+                    "The episode opens with the relief crew crossing toward the isolated "
+                    "lighthouse and finding empty rooms where three men should have been. "
+                    "The story stays grounded in the documented disappearance, the hard "
+                    "weather, and the clues that made the surviving record difficult to close."
+                ),
+                key_beats=[
+                    "The relief vessel approaches the dark lighthouse.",
+                    "The first man steps inside and finds the rooms empty.",
+                    "The missing oilskins raise questions about whether the keepers went outside.",
+                    "The damaged landing suggests the sea may have reached higher than expected.",
+                    "The logbook entries make the final days feel more confusing.",
+                    "Later retellings turn uncertain details into legend.",
+                ],
+                narrative_purpose=(
+                    "Open with the eerie discovery and establish the grounded mystery."
+                ),
+                avoid_repeating=[
+                    "Do not repeat later theories before the physical clues are established.",
+                ],
+                continuity_from_previous="Series opener: establish the central disappearance.",
+            )
+        )
+        plan["series_narrative_arc"] = (
+            "The mystery begins with the relief vessel reaching a silent lighthouse, "
+            "escalates through the empty rooms, damaged landing, and uncertain logbook "
+            "details, and ends by separating the grounded evidence from the legend that "
+            "grew around the missing keepers."
         )
 
         report = validate_series_plan_quality(plan)
