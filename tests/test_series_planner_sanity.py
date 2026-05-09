@@ -364,6 +364,57 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             report["issues"],
         )
 
+    def test_quality_validation_flags_testimonies_source_wording(self):
+        plan = _base_plan(
+            _base_episode(
+                evidence_focus=["Testimonies about the missing keepers."],
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("fake-source-adjacent wording: testimonies" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
+    def test_quality_validation_flags_historical_sources_wording(self):
+        plan = _base_plan(
+            _base_episode(
+                evidence_focus=["Historical sources about the lighthouse case."],
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any(
+                "fake-source-adjacent wording: historical sources" in issue
+                for issue in report["issues"]
+            ),
+            report["issues"],
+        )
+
+    def test_quality_validation_flags_experts_say_wording(self):
+        plan = _base_plan(
+            _base_episode(
+                chapter_summary=(
+                    "Experts say the lighthouse disappearance still depends on clues "
+                    "that should be handled carefully."
+                ),
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("fake-source-adjacent wording: experts say" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
     def test_quality_validation_flags_analysis_of_key_beat(self):
         plan = _base_plan(
             _base_episode(
@@ -376,6 +427,21 @@ class SeriesPlannerSanityTests(unittest.TestCase):
         self.assertFalse(report["ready_for_batch"])
         self.assertTrue(
             any("vague key beat wording: analysis of" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
+    def test_quality_validation_flags_exploration_of_key_beat(self):
+        plan = _base_plan(
+            _base_episode(
+                key_beats=["Exploration of the theories about the missing keepers."],
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("vague key beat wording: exploration of" in issue for issue in report["issues"]),
             report["issues"],
         )
 
@@ -488,6 +554,52 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             "the limited official record. The central tension is what the physical clues "
             "can explain versus what later retellings turned into legend, ending with "
             "the strongest grounded theory and the question that remains unknown."
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertTrue(report["ready_for_batch"], report["issues"])
+
+    def test_cautious_source_wording_passes_quality_check(self):
+        plan = _base_plan(
+            _base_episode(
+                hook=(
+                    "When the relief crew reached the lighthouse, the lamps were dark, "
+                    "the keepers were gone, and the sea had left almost no answers behind."
+                ),
+                chapter_summary=(
+                    "The episode opens with the relief crew crossing toward the isolated "
+                    "lighthouse and finding empty rooms where three men should have been. "
+                    "The story uses documented details, if available, and later retellings, "
+                    "which should be treated carefully, without overstating what the record "
+                    "can prove."
+                ),
+                key_beats=[
+                    "The relief vessel approaches the dark lighthouse.",
+                    "The replacement keeper steps inside and finds the station empty.",
+                    "The lamps are out even though they should have been burning.",
+                    "One set of oilskins appears to have been left behind.",
+                    "The west landing shows signs of storm damage.",
+                    "Later versions of the story turn uncertainty into legend.",
+                ],
+                evidence_focus=[
+                    "Documented details, if available.",
+                    "Later retellings, which should be treated carefully.",
+                    "Disputed claims that should not be overstated.",
+                ],
+                narrative_purpose=(
+                    "Open with the eerie discovery and separate careful facts from legend."
+                ),
+                avoid_repeating=[
+                    "Do not repeat later theories before the physical clues are established.",
+                ],
+                continuity_from_previous="Series opener: establish the central disappearance.",
+            )
+        )
+        plan["series_narrative_arc"] = (
+            "The mystery begins with the relief vessel reaching a silent lighthouse, "
+            "escalates through the empty station and storm-damaged landing, and ends "
+            "by separating careful documented details from later retellings."
         )
 
         report = validate_series_plan_quality(plan)
