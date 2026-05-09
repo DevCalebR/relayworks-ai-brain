@@ -138,7 +138,9 @@ VAGUE_BEAT_PHRASES = {
     "analysis",
     "analysis of",
     "background",
+    "background of",
     "context",
+    "context of",
     "discussion",
     "discussion of",
     "evidence",
@@ -151,22 +153,29 @@ VAGUE_BEAT_PHRASES = {
     "investigation of",
     "legacy",
     "introduction",
+    "introduction to",
     "overview",
     "overview of",
     "possible theories",
+    "summary",
+    "summary of",
     "theories",
     "expert analysis",
     "final thoughts",
 }
-VAGUE_BEAT_ACADEMIC_PHRASES = {
+VAGUE_BEAT_ACADEMIC_PHRASES = (
     "analysis of",
+    "background of",
+    "context of",
     "discussion of",
     "examination of",
     "exploration of",
-    "overview of",
     "investigation of",
+    "introduction to",
     "implications of",
-}
+    "overview of",
+    "summary of",
+)
 FINAL_NEXT_EPISODE_SETUP = (
     "Series conclusion: leave viewers with the strongest grounded explanation and "
     "the mystery that remains."
@@ -1482,21 +1491,29 @@ def create_series_plan(
                     "learn, This episode discusses, or explores various factors. Prefer "
                     "story-forward phrasing like The episode opens in, The tension builds "
                     "when, The key turn comes when, and By the end, the viewer understands.\n"
-                    "- key_beats must include 6-9 specific, concrete, visual story moments per episode. "
-                    "Reject vague key beats like discussion, possible theories, evidence, "
-                    "context, background, overview, analysis, expert opinions, legacy, "
-                    "implications, or theories. Do not use academic phrases such as "
-                    "analysis of, discussion of, exploration of, overview of, examination "
-                    "of, investigation of, possible theories, implications of, reflection "
-                    "on, modern theories of, contemporary society, or expert commentary. "
-                    "Use concrete beats that can become scenes, such as the relief vessel "
+                    "- key_beats must include 6-9 specific, concrete, visual, "
+                    "story-driven moments per episode. Every key beat must be a moment "
+                    "that could become a scene, clue reveal, physical discovery, or "
+                    "specific narrative turn. Do not write key beats as academic labels, "
+                    "essay sections, research tasks, or broad categories. Reject vague "
+                    "key beats like discussion, possible theories, evidence, context, "
+                    "background, overview, analysis, expert opinions, legacy, "
+                    "implications, or theories. Do not use vague academic phrases such "
+                    "as overview of, analysis of, discussion of, exploration of, "
+                    "examination of, investigation of, summary of, introduction to, "
+                    "context of, background of, implications of, possible theories, "
+                    "reflection on, modern theories of, contemporary society, or expert "
+                    "commentary. Bad key beats: overview of the lighthouse mystery; "
+                    "analysis of possible explanations; discussion of the evidence; "
+                    "background of the keepers; exploration of the theories. Use "
+                    "concrete beats that can become scenes, such as the relief vessel "
                     "approaches the dark lighthouse, the first man steps inside and finds "
-                    "the rooms empty, the missing oilskins raise questions about whether "
-                    "the keepers went outside, the damaged landing suggests the sea may "
-                    "have reached higher than expected, the logbook entries make the final "
-                    "days feel more confusing, later retellings turn uncertain details into "
-                    "legend, or the strongest theory explains one clue but leaves another "
-                    "unresolved.\n"
+                    "the rooms empty, the table is set but the keepers are gone, the "
+                    "missing oilskins raise questions about whether the men went outside, "
+                    "the damaged landing suggests the sea may have reached higher than "
+                    "expected, the logbook entries make the final days harder to explain, "
+                    "later retellings turn uncertain details into legend, or the "
+                    "strongest theory explains one clue but leaves another unresolved.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
                     "teases like What happened next, The mystery continues, More questions "
                     "remain, The legend continues, or The mystery remains. Do not use "

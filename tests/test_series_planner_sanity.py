@@ -379,6 +379,21 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             report["issues"],
         )
 
+    def test_quality_validation_flags_overview_of_key_beat(self):
+        plan = _base_plan(
+            _base_episode(
+                key_beats=["Overview of the lighthouse mystery."],
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("vague key beat wording: overview of" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
     def test_quality_validation_normalizes_unsupported_values_for_review(self):
         plan = _base_plan(
             _base_episode(
