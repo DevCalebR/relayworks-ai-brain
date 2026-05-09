@@ -66,22 +66,31 @@ EPISODE_REQUIRED_FIELDS = [
     "suggested_video_format",
 ]
 GENERIC_EVIDENCE_TERMS = {
+    "contemporary accounts",
     "letters",
     "documents",
     "expert commentary",
     "expert opinions",
+    "experts say",
+    "historians believe",
     "historical sources",
     "interviews",
+    "local accounts",
     "medical records",
     "modern theories",
+    "official reports",
     "official sentiment",
     "personal accounts",
+    "records show",
     "historical documents",
     "psychological studies",
     "recorded statements",
     "scholarly articles",
+    "scholars say",
+    "sources say",
     "testimonies",
     "unnamed sources",
+    "witness accounts",
 }
 GENERIC_TITLE_PHRASES = {
     "the beginning",
@@ -118,12 +127,20 @@ WEAK_HOOK_PHRASES = {
     "why does this still haunt history",
 }
 VAGUE_SOURCE_PHRASES = {
+    "contemporary accounts",
     "experts say",
     "expert opinions",
     "expert commentary",
+    "historians believe",
     "interviews with officials",
+    "interviews",
+    "local accounts",
+    "official reports",
     "witness interviews",
+    "witness accounts",
     "scholars agree",
+    "scholars say",
+    "sources say",
     "records show",
     "historical sources",
     "historical documents",
@@ -1307,11 +1324,14 @@ def create_series_plan(
                     "uncertain, phrase it as uncertain or omit it. If a famous legend "
                     "detail is disputed, exaggerated, or from later retellings, label it "
                     "that way or avoid it. Do not use fake expert interviews or imply "
-                    "interviews or sources exist unless actual named sources are available "
-                    "in the provided topic context. Do not use phrases like experts say "
-                    "unless the plan identifies what kind of evidence supports the point. "
-                    "Do not use generic filler like expert opinions unless specific "
-                    "evidence or inquiry records are being discussed. "
+                    "interviews, experts, scholars, official records, testimonies, or "
+                    "sources exist unless actual named sources are available in the "
+                    "provided topic context. Do not use phrases like testimonies, "
+                    "historical sources, sources say, experts say, scholars say, witness "
+                    "accounts, interviews, official reports, records show, historians "
+                    "believe, local accounts, or contemporary accounts as vague authority "
+                    "language. Do not use generic filler like expert opinions unless "
+                    "specific evidence or inquiry records are being discussed. "
                     "Every episode must stay directly tied to the requested topic. Do not "
                     "borrow details from other famous mysteries. Do not insert ghost ship "
                     "details into lighthouse cases, and do not insert lighthouse details "
@@ -1320,13 +1340,20 @@ def create_series_plan(
                     "findings unless the requested topic specifically supports them. If "
                     "you are unsure whether a detail belongs to this topic, omit it or "
                     "label it as disputed folklore. Do not use generic mystery tropes as "
-                    "evidence. Do not use fake-source-adjacent language such as expert "
-                    "commentary, experts say, official sentiment, recorded statements, "
-                    "interviews, or testimonies unless actual named or known sources are "
-                    "provided. Prefer safer phrasing such as later historians have argued, "
-                    "some interpretations suggest, contemporary records are limited, later "
-                    "accounts claim, or the evidence does not prove. evidence_focus must "
-                    "contain only topic-relevant evidence. "
+                    "evidence. Do not use fake-source-adjacent language such as "
+                    "testimonies, historical sources, sources say, experts say, scholars "
+                    "say, witness accounts, interviews, official reports, records show, "
+                    "historians believe, local accounts, contemporary accounts, expert "
+                    "commentary, official sentiment, or recorded statements unless the "
+                    "plan names the specific source and why it is reliable. Do not use "
+                    "testimonies unless the plan names whose testimony and why it is "
+                    "reliable. Do not use historical sources as a vague catch-all. If "
+                    "unsure, use cautious wording like documented details, if available; "
+                    "later retellings, which should be treated carefully; disputed claims "
+                    "that should not be overstated; details repeated in later versions of "
+                    "the story; or evidence that is often exaggerated in retellings. "
+                    "Never use fake authority language to make the plan sound stronger. "
+                    "evidence_focus must contain only topic-relevant evidence. "
                     "Do not present supernatural, alien, or paranormal theories as serious "
                     "explanations unless the requested topic is explicitly a legend or myth. "
                     "For factual cases, supernatural theories may be mentioned only as "
@@ -1403,23 +1430,35 @@ def create_series_plan(
                     "with the most honest explanation and the mystery that remains.\n\n"
                     "evidence_focus must be a list of concrete evidence, known facts, "
                     "documents, locations, artifacts, or observations the episode should "
-                    "use. Make entries specific to the topic, such as city council response, "
+                    "use. evidence_focus and chapter_summary must avoid vague source "
+                    "wording such as testimonies, historical sources, sources say, "
+                    "experts say, scholars say, witness accounts, interviews, official "
+                    "reports, records show, historians believe, local accounts, or "
+                    "contemporary accounts. Make entries specific to the topic, such as "
+                    "city council response, "
                     "contemporary chronicle accounts, carefully qualified reported numbers, "
                     "religious beliefs around St. Vitus, famine, disease, or social stress "
                     "context, later summaries of physician recommendations clearly framed, "
                     "disputed reports about dancer numbers and outcomes, later retellings "
                     "versus documented claims, last log entry, cargo condition, official "
-                    "inquiry, weather reports, witness report, location of discovery, or "
-                    "timeline gap. If there is no concrete evidence, say the episode is "
-                    "interpretive or reflective and identify what it should avoid "
-                    "overstating. Do not list generic or fake-source evidence such as "
-                    "scholarly articles, expert opinions, psychological studies, interviews, "
-                    "expert commentary, modern theories, personal accounts, official sentiment, "
-                    "letters, documents, historical sources, historical documents, medical "
-                    "records, unnamed sources, cryptic notes, empty ships, drifting vessels, "
-                    "or lifeboats unless they are specifically "
-                    "supported by the requested topic; if they are only legend material, "
-                    "label them as disputed folklore. avoid_repeating must list specific "
+                    "inquiry records if they exist for the topic, weather reports, a named "
+                    "witness report if relevant, location of discovery, lighthouse log "
+                    "entries if relevant, relief crew observations if relevant, newspaper "
+                    "reports if relevant and framed carefully, documented details if "
+                    "available, or timeline gap. If there is no concrete evidence, say "
+                    "the episode is interpretive or reflective and identify what it should "
+                    "avoid overstating. Do not list generic or fake-source evidence such "
+                    "as scholarly articles, expert opinions, psychological studies, "
+                    "interviews, expert commentary, modern theories, personal accounts, "
+                    "official sentiment, letters, documents, historical sources, "
+                    "historical documents, medical records, unnamed sources, cryptic "
+                    "notes, empty ships, drifting vessels, or lifeboats unless they are "
+                    "specifically supported by the requested topic; if they are only "
+                    "legend material, label them as disputed folklore. Preferred cautious "
+                    "wording includes later retellings, which should be treated carefully; "
+                    "disputed claims that should not be overstated; details repeated in "
+                    "later versions of the story; and evidence that is often exaggerated "
+                    "in retellings. avoid_repeating must list specific "
                     "things this episode should not repeat from earlier episodes, such as "
                     "Do not re-explain the first dancer except in one sentence, Do not "
                     "repeat the full city background from Episode 2, or Do not treat "
@@ -1436,7 +1475,8 @@ def create_series_plan(
                     "so the viewer understands why the story matters; Episode 2 pressure, "
                     "backstory, timeline, and context focused on the conditions that made "
                     "the mystery possible, not a dry history dump; Episode 3 strongest "
-                    "evidence, contradictions, documents, clues, or witness accounts, "
+                    "evidence, contradictions, documents, clues, or named witness reports "
+                    "when they are actually supported by the topic, "
                     "carefully separating known facts from later retellings; Episode 4 "
                     "theories, what each theory explains, and what each theory fails to "
                     "explain, with no theory presented as proven unless it is established; "
@@ -1487,6 +1527,9 @@ def create_series_plan(
                     "specific story beats, what evidence or context the episode uses, how "
                     "the story escalates, what the viewer learns, and how the episode connects "
                     "to the next. "
+                    "Do not cite vague authorities in chapter_summary; use concrete "
+                    "topic-relevant evidence or cautious wording such as later retellings, "
+                    "which should be treated carefully, or documented details, if available. "
                     "Avoid academic phrasing like This episode investigates, Viewers will "
                     "learn, This episode discusses, or explores various factors. Prefer "
                     "story-forward phrasing like The episode opens in, The tension builds "
@@ -1503,17 +1546,18 @@ def create_series_plan(
                     "examination of, investigation of, summary of, introduction to, "
                     "context of, background of, implications of, possible theories, "
                     "reflection on, modern theories of, contemporary society, or expert "
-                    "commentary. Bad key beats: overview of the lighthouse mystery; "
+                    "commentary. Any key beat containing these phrases fails quality "
+                    "review. Bad key beats: overview of the lighthouse mystery; "
                     "analysis of possible explanations; discussion of the evidence; "
                     "background of the keepers; exploration of the theories. Use "
                     "concrete beats that can become scenes, such as the relief vessel "
-                    "approaches the dark lighthouse, the first man steps inside and finds "
-                    "the rooms empty, the table is set but the keepers are gone, the "
-                    "missing oilskins raise questions about whether the men went outside, "
-                    "the damaged landing suggests the sea may have reached higher than "
-                    "expected, the logbook entries make the final days harder to explain, "
-                    "later retellings turn uncertain details into legend, or the "
-                    "strongest theory explains one clue but leaves another unresolved.\n"
+                    "approaches the dark lighthouse, the replacement keeper steps inside "
+                    "and finds the station empty, the lamps are out even though they "
+                    "should have been burning, one set of oilskins appears to have been "
+                    "left behind, the west landing shows signs of storm damage, the sea "
+                    "offers a possible explanation but no complete answer, later versions "
+                    "of the story turn uncertainty into legend, or the most grounded "
+                    "theory explains the disappearance without solving every detail.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
                     "teases like What happened next, The mystery continues, More questions "
                     "remain, The legend continues, or The mystery remains. Do not use "
