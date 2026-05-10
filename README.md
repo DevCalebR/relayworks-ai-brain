@@ -41,6 +41,7 @@ Common options:
 - `--thumbnail-source`: uses a local source image for `thumbnail` mode.
 - `--use-ai-thumbnail`: uses OpenAI to generate a thumbnail background.
 - `--organize`: copies successful run outputs into a timestamped folder under `outputs/runs/`.
+- `--reuse-assets`: reuses existing full-mode script, metadata, image, thumbnail, and audio outputs when present.
 - `--run-folder`: points `upload-check` and `upload` modes to an organized run folder under `outputs/runs/`.
 - `--privacy-status`: controls YouTube visibility for `upload` mode. Use `private` by default.
 - `--upload-thumbnail`: optionally uploads `thumbnail.png` from the run folder after a successful video upload.
@@ -199,6 +200,24 @@ python main.py --mode full \
   --target-duration-seconds 900 \
   --video-format landscape
 ```
+
+Resume a failed long-form run without regenerating costly local assets:
+
+```bash
+python main.py --mode full \
+  --script-path scripts/sodder-children-longform.txt \
+  --topic "The Disappearance of the Sodder Children" \
+  --template ai \
+  --organize \
+  --use-ai-images \
+  --image-count 30 \
+  --generate-thumbnail \
+  --target-duration-seconds 900 \
+  --video-format landscape \
+  --reuse-assets
+```
+
+`--reuse-assets` is useful after a failed full-mode run. It reuses existing saved script, metadata, AI scene images, thumbnail, and final audio files when they already exist under `outputs/`, avoiding repeat OpenAI image or ElevenLabs audio calls for those assets. Captions and video may still be regenerated locally so they reflect the final audio and current render inputs.
 
 Check the newest organized run before upload:
 
