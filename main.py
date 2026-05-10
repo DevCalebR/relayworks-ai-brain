@@ -5,6 +5,13 @@ from datetime import datetime
 from pathlib import Path
 
 from agents.script_agent import generate_episode_script_from_chapter, generate_script
+from tools.asset_reuse import (
+    find_existing_audio_path,
+    find_existing_metadata_path,
+    find_existing_scene_images,
+    find_existing_script_path,
+    find_existing_thumbnail_path,
+)
 from tools.captions import save_srt_captions
 from tools.file_writer import save_script
 from tools.generation_pipeline import (
@@ -130,6 +137,14 @@ def parse_args():
         "--organize",
         action="store_true",
         help="Copy generated outputs into a timestamped local run folder.",
+    )
+    parser.add_argument(
+        "--reuse-assets",
+        action="store_true",
+        help=(
+            "Reuse existing full-mode script, metadata, image, thumbnail, "
+            "and audio outputs when present."
+        ),
     )
     parser.add_argument(
         "--caption-offset",
@@ -310,6 +325,14 @@ def _topic_from_script_path(script_path):
     topic = re.sub(r"[-_]+", " ", stem)
     topic = re.sub(r"\s+", " ", topic).strip()
     return topic.title() or DEFAULT_TOPIC
+
+
+def _script_output_matches(script_path, topic, script):
+    expected_content = f"Topic: {topic}\n\n{script}"
+    try:
+        return Path(script_path).read_text(encoding="utf-8") == expected_content
+    except OSError:
+        return False
 
 
 def print_topic_research(topics, saved_path):
@@ -999,24 +1022,63 @@ def main():
         log_success(topic, args.mode, outputs, args.organize)
         return
 
+    reuse_full_assets = args.mode == "full" and args.reuse_assets
+    reused_script_source = False
+
     if source_script is None:
-        script = generate_script(
-            topic,
-            target_duration_seconds=args.target_duration_seconds,
+        existing_script_path = (
+            find_existing_script_path(topic) if reuse_full_assets else None
         )
+
+        if existing_script_path:
+            script = read_script_file(existing_script_path)
+            reused_script_source = True
+            print(f"\nReusing existing script output: {existing_script_path}")
+        else:
+            script = generate_script(
+                topic,
+                target_duration_seconds=args.target_duration_seconds,
+            )
     else:
         script = source_script
 
     narration_text = ensure_call_to_action(clean_narration_text(script))
 
-    script_path = save_script(topic, script)
+    existing_script_path = (
+        find_existing_script_path(topic) if reuse_full_assets else None
+    )
+
+    if (
+        existing_script_path
+        and (
+            reused_script_source
+            or _script_output_matches(existing_script_path, topic, script)
+        )
+    ):
+        script_path = str(existing_script_path)
+    else:
+        if existing_script_path and source_script_path:
+            print(
+                "\nExisting script output differs from source script; "
+                "saving updated script."
+            )
+
+        script_path = save_script(topic, script)
+
     outputs = {"script": script_path}
 
     if source_script_path:
         outputs["source_script_path"] = source_script_path
 
     if args.mode in ["full", "script"]:
-        print("\nProvided Script:" if source_script_path else "\nGenerated Script:")
+        if source_script_path:
+            script_label = "\nProvided Script:"
+        elif reused_script_source:
+            script_label = "\nReused Script:"
+        else:
+            script_label = "\nGenerated Script:"
+
+        print(script_label)
         print(script)
 
     print("\nSaved script path:")
@@ -1054,21 +1116,52 @@ def main():
         return
 
     if args.mode == "full":
-        metadata_path = save_video_metadata(topic, script, topic)
+        existing_metadata_path = (
+            find_existing_metadata_path(topic) if reuse_full_assets else None
+        )
+
+        if existing_metadata_path:
+            metadata_path = str(existing_metadata_path)
+            print(f"\nReusing existing metadata: {metadata_path}")
+        else:
+            metadata_path = save_video_metadata(topic, script, topic)
+
         outputs["metadata"] = metadata_path
 
         print("\nSaved metadata path:")
         print(metadata_path)
 
         if args.use_ai_images:
-            image_paths = generate_scene_images(
-                topic,
-                narration_text,
-                topic,
-                image_count=args.image_count,
-                template=args.template,
-                video_format=args.video_format,
+            existing_image_paths = (
+                find_existing_scene_images(topic, args.image_count)
+                if reuse_full_assets
+                else []
             )
+
+            if len(existing_image_paths) >= args.image_count:
+                image_paths = [
+                    str(image_path)
+                    for image_path in existing_image_paths[: args.image_count]
+                ]
+                print(f"\nReusing existing AI images: {len(image_paths)} found")
+            else:
+                if reuse_full_assets and existing_image_paths:
+                    print(
+                        "\nReusing existing AI images where present: "
+                        f"{len(existing_image_paths)} found, "
+                        f"{args.image_count} requested"
+                    )
+
+                image_paths = generate_scene_images(
+                    topic,
+                    narration_text,
+                    topic,
+                    image_count=args.image_count,
+                    template=args.template,
+                    video_format=args.video_format,
+                    skip_existing=reuse_full_assets,
+                )
+
             outputs["images"] = image_paths
             outputs["ai_images_used"] = True
             outputs["image_count"] = len(image_paths)
@@ -1078,24 +1171,40 @@ def main():
                 print(image_path)
 
         if args.generate_thumbnail:
-            thumbnail_source_paths = None
-
-            if image_paths and not args.use_ai_thumbnail:
-                thumbnail_source_paths = [image_paths[0]]
-
-            thumbnail_path = generate_thumbnail(
-                topic,
-                topic,
-                source_image_paths=thumbnail_source_paths,
-                use_ai=args.use_ai_thumbnail,
-                template=args.template,
+            existing_thumbnail_path = (
+                find_existing_thumbnail_path(topic) if reuse_full_assets else None
             )
+
+            if existing_thumbnail_path:
+                thumbnail_path = str(existing_thumbnail_path)
+                print(f"\nReusing existing thumbnail: {thumbnail_path}")
+            else:
+                thumbnail_source_paths = None
+
+                if image_paths and not args.use_ai_thumbnail:
+                    thumbnail_source_paths = [image_paths[0]]
+
+                thumbnail_path = generate_thumbnail(
+                    topic,
+                    topic,
+                    source_image_paths=thumbnail_source_paths,
+                    use_ai=args.use_ai_thumbnail,
+                    template=args.template,
+                )
+
             outputs["thumbnail"] = thumbnail_path
 
             print("\nSaved thumbnail path:")
             print(thumbnail_path)
 
-    audio_path = generate_voiceover(narration_text, topic)
+    existing_audio_path = find_existing_audio_path(topic) if reuse_full_assets else None
+
+    if existing_audio_path:
+        audio_path = str(existing_audio_path)
+        print(f"\nReusing existing audio: {audio_path}")
+    else:
+        audio_path = generate_voiceover(narration_text, topic)
+
     outputs["audio"] = audio_path
 
     print("\nSaved audio path:")

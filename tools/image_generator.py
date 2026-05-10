@@ -305,6 +305,7 @@ def generate_scene_images(
     image_count=5,
     template="default",
     video_format="vertical",
+    skip_existing=False,
 ):
     """
     Generate local scene images with OpenAI and return saved PNG paths.
@@ -315,13 +316,22 @@ def generate_scene_images(
     if not scenes:
         raise ValueError("Narration text is empty; cannot generate scene images.")
 
-    client = _get_client()
     IMAGES_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+    client = None
     saved_paths = []
     slug = _safe_filename(output_name)
 
     for index, scene in enumerate(scenes, start=1):
+        output_path = IMAGES_OUTPUT_DIR / f"{slug}-scene-{index:02}.png"
+
+        if skip_existing and output_path.is_file():
+            saved_paths.append(str(output_path))
+            continue
+
+        if client is None:
+            client = _get_client()
+
         prompt = _build_image_prompt(topic, scene, template, video_format)
 
         try:
@@ -351,7 +361,6 @@ def generate_scene_images(
                 f"OpenAI image response did not include image data for scene {index}."
             )
 
-        output_path = IMAGES_OUTPUT_DIR / f"{slug}-scene-{index:02}.png"
         output_path.write_bytes(base64.b64decode(image_data))
         saved_paths.append(str(output_path))
 
