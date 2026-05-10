@@ -159,6 +159,8 @@ Generate voiceover:
 python main.py --mode voiceover
 ```
 
+Long scripts are automatically split into safe ElevenLabs-sized chunks and combined into one final MP3.
+
 Create local test audio:
 
 ```bash
