@@ -9,6 +9,7 @@ from tools.series_planner import (
     DEFAULT_SUGGESTED_IMAGE_COUNT,
     DEFAULT_SUGGESTED_VIDEO_FORMAT,
     _normalize_series_plan,
+    _raise_for_series_plan_quality,
     _validate_series_plan,
     save_series_plan,
     validate_series_plan_quality,
@@ -459,6 +460,82 @@ class SeriesPlannerSanityTests(unittest.TestCase):
             any("vague key beat wording: overview of" in issue for issue in report["issues"]),
             report["issues"],
         )
+
+    def test_quality_validation_flags_vague_outline_language_across_story_fields(self):
+        plan = _base_plan(
+            _base_episode(
+                title="Deep Dive Into The Faces of Suspect",
+                chapter_summary=(
+                    "Discussion of abandoned parachutes and possible evidence keeps "
+                    "the episode too broad to produce as documentary story material."
+                ),
+                key_beats=[
+                    "Discussion of abandoned parachutes and possible evidence.",
+                    "Detailed examination of the survival theory.",
+                    "Comparative analysis of theories and their flaws.",
+                    "Discussion among amateur detectives.",
+                ],
+                evidence_focus=[
+                    "Public fascination and cultural impact around the case.",
+                ],
+                ending_tease="Reflection on FBI closure results.",
+            )
+        )
+
+        report = validate_series_plan_quality(plan)
+
+        self.assertFalse(report["ready_for_batch"])
+        expected_issue_fragments = [
+            "vague title wording: deep dive",
+            "awkward title wording: faces of suspect",
+            "vague chapter_summary wording: discussion of",
+            "vague key beat wording: discussion of",
+            "vague key beat wording: examination of",
+            "vague key beat wording: analysis of",
+            "vague key beat wording: discussion.",
+            "vague evidence_focus wording: public fascination",
+            "vague ending_tease wording: reflection on",
+        ]
+        for expected_fragment in expected_issue_fragments:
+            self.assertTrue(
+                any(expected_fragment in issue for issue in report["issues"]),
+                report["issues"],
+            )
+
+    def test_quality_validation_flags_invalid_image_count_and_requested_count(self):
+        plan = _base_plan(_base_episode(suggested_image_count=0))
+        plan["episode_count"] = 2
+
+        report = validate_series_plan_quality(plan, expected_episodes=2)
+
+        self.assertFalse(report["ready_for_batch"])
+        self.assertTrue(
+            any("episode_count is 2, but episode_plan has 1 episodes" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+        self.assertTrue(
+            any("invalid suggested_image_count: 0" in issue for issue in report["issues"]),
+            report["issues"],
+        )
+
+    def test_generated_series_plan_quality_failure_raises_clear_error(self):
+        plan = _base_plan(
+            _base_episode(
+                narrative_purpose=(
+                    "Test the strongest explanations against the record without "
+                    "pretending certainty."
+                ),
+                key_beats=[
+                    "Discussion of abandoned parachutes and possible evidence.",
+                ],
+            )
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "vague key beat wording: discussion of.*Rerun series-plan",
+        ):
+            _raise_for_series_plan_quality(plan, expected_episodes=1)
 
     def test_quality_validation_normalizes_unsupported_values_for_review(self):
         plan = _base_plan(
