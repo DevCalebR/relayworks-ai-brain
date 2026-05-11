@@ -88,38 +88,6 @@ def _get_video_size(video_format):
     return VIDEO_FORMATS[video_format]
 
 
-def _scale_position(position, scale_x, scale_y):
-    if not isinstance(position, tuple):
-        return position
-
-    x, y = position
-
-    if isinstance(x, (int, float)):
-        x = int(x * scale_x)
-
-    if isinstance(y, (int, float)):
-        y = int(y * scale_y)
-
-    return (x, y)
-
-
-def _scale_shapes(shapes, scale_x, scale_y):
-    scaled_shapes = []
-
-    for shape in shapes:
-        width, height = shape["size"]
-        scaled_shape = dict(shape)
-        scaled_shape["size"] = (int(width * scale_x), int(height * scale_y))
-        scaled_shape["position"] = _scale_position(
-            shape["position"],
-            scale_x,
-            scale_y,
-        )
-        scaled_shapes.append(scaled_shape)
-
-    return scaled_shapes
-
-
 def _get_template_config(template, video_format="vertical"):
     configs = {
         "default": {
@@ -129,10 +97,6 @@ def _get_template_config(template, video_format="vertical"):
             "title_stroke_color": None,
             "title_stroke_width": 0,
             "title_y": "center",
-            "subtitle_text": "RelayWorks AI Content Brain",
-            "subtitle_font_size": 34,
-            "subtitle_color": "white",
-            "subtitle_y": 1540,
             "caption_font_size": 58,
             "caption_color": "white",
             "caption_stroke_color": "black",
@@ -142,7 +106,6 @@ def _get_template_config(template, video_format="vertical"):
             "caption_box_color": (0, 0, 0),
             "caption_box_opacity": 0.58,
             "caption_padding": 34,
-            "shapes": [],
         },
         "bold": {
             "background_color": (8, 8, 10),
@@ -151,10 +114,6 @@ def _get_template_config(template, video_format="vertical"):
             "title_stroke_color": "black",
             "title_stroke_width": 3,
             "title_y": 520,
-            "subtitle_text": "RelayWorks AI Content Brain",
-            "subtitle_font_size": 36,
-            "subtitle_color": "#ffdd33",
-            "subtitle_y": 1485,
             "caption_font_size": 64,
             "caption_color": "white",
             "caption_stroke_color": "black",
@@ -164,11 +123,6 @@ def _get_template_config(template, video_format="vertical"):
             "caption_box_color": (255, 43, 43),
             "caption_box_opacity": 0.86,
             "caption_padding": 38,
-            "shapes": [
-                {"size": (1080, 130), "color": (255, 43, 43), "opacity": 1.0, "position": (0, 0)},
-                {"size": (1080, 18), "color": (255, 221, 51), "opacity": 1.0, "position": (0, 130)},
-                {"size": (1080, 110), "color": (255, 43, 43), "opacity": 1.0, "position": (0, 1810)},
-            ],
         },
         "minimal": {
             "background_color": (246, 247, 242),
@@ -177,10 +131,6 @@ def _get_template_config(template, video_format="vertical"):
             "title_stroke_color": None,
             "title_stroke_width": 0,
             "title_y": 610,
-            "subtitle_text": "RelayWorks AI Content Brain",
-            "subtitle_font_size": 30,
-            "subtitle_color": "#4f5b57",
-            "subtitle_y": 1450,
             "caption_font_size": 54,
             "caption_color": "#111111",
             "caption_stroke_color": None,
@@ -190,10 +140,6 @@ def _get_template_config(template, video_format="vertical"):
             "caption_box_color": (255, 255, 255),
             "caption_box_opacity": 0.82,
             "caption_padding": 34,
-            "shapes": [
-                {"size": (780, 3), "color": (34, 34, 34), "opacity": 0.22, "position": ("center", 500)},
-                {"size": (780, 3), "color": (34, 34, 34), "opacity": 0.22, "position": ("center", 1395)},
-            ],
         },
         "ai": {
             "background_color": (5, 11, 24),
@@ -202,10 +148,6 @@ def _get_template_config(template, video_format="vertical"):
             "title_stroke_color": "#07111f",
             "title_stroke_width": 2,
             "title_y": 560,
-            "subtitle_text": "RelayWorks AI Content Brain",
-            "subtitle_font_size": 34,
-            "subtitle_color": "#76f7d1",
-            "subtitle_y": 1485,
             "caption_font_size": 58,
             "caption_color": "#f8ffff",
             "caption_stroke_color": "#06101b",
@@ -215,14 +157,6 @@ def _get_template_config(template, video_format="vertical"):
             "caption_box_color": (10, 28, 52),
             "caption_box_opacity": 0.84,
             "caption_padding": 36,
-            "shapes": [
-                {"size": (1080, 8), "color": (118, 247, 209), "opacity": 0.65, "position": (0, 220)},
-                {"size": (1080, 8), "color": (84, 131, 255), "opacity": 0.65, "position": (0, 1690)},
-                {"size": (8, 1420), "color": (118, 247, 209), "opacity": 0.35, "position": (128, 250)},
-                {"size": (8, 1420), "color": (84, 131, 255), "opacity": 0.35, "position": (944, 250)},
-                {"size": (320, 320), "color": (84, 131, 255), "opacity": 0.18, "position": (760, 120)},
-                {"size": (360, 360), "color": (118, 247, 209), "opacity": 0.12, "position": (-140, 1410)},
-            ],
         },
     }
 
@@ -239,52 +173,24 @@ def _get_template_config(template, video_format="vertical"):
 
     _get_video_size(video_format)
 
-    scale_x = VIDEO_FORMATS["landscape"][0] / VIDEO_FORMATS["vertical"][0]
-    scale_y = VIDEO_FORMATS["landscape"][1] / VIDEO_FORMATS["vertical"][1]
     font_scale = 0.78
 
     config["title_font_size"] = int(config["title_font_size"] * font_scale)
-    config["subtitle_font_size"] = int(config["subtitle_font_size"] * font_scale)
     config["caption_font_size"] = int(config["caption_font_size"] * font_scale)
     config["title_y"] = int(270 if template != "bold" else 230)
-    config["subtitle_y"] = 865
     config["caption_y"] = 780
     config["caption_width"] = 1320
     config["caption_padding"] = int(config["caption_padding"] * 0.78)
-    config["shapes"] = _scale_shapes(config["shapes"], scale_x, scale_y)
 
     return config
 
 
-def _create_shape_clips(template_config, duration):
-    clips = []
-
-    for shape in template_config["shapes"]:
-        clip = ColorClip(
-            size=shape["size"],
-            color=shape["color"],
-            duration=duration,
-        ).with_position(shape["position"])
-
-        if shape["opacity"] < 1:
-            clip = clip.with_opacity(shape["opacity"])
-
-        clips.append(clip)
-
-    return clips
-
-
 def _create_background_clip(template_config, duration, video_size):
-    clips = [
-        ColorClip(
-            size=video_size,
-            color=template_config["background_color"],
-            duration=duration,
-        ),
-        *_create_shape_clips(template_config, duration),
-    ]
-
-    return CompositeVideoClip(clips, size=video_size)
+    return ColorClip(
+        size=video_size,
+        color=template_config["background_color"],
+        duration=duration,
+    )
 
 
 def _create_cover_image_clip(image_path, duration, video_size, start_time=0):
@@ -318,9 +224,7 @@ def _create_image_background_clip(image_paths, template_config, duration, video_
         raise ValueError("image_paths must contain at least one image")
 
     if len(image_paths) == 1:
-        clips = [_create_cover_image_clip(image_paths[0], duration, video_size)]
-        clips.extend(_create_shape_clips(template_config, duration))
-        return CompositeVideoClip(clips, size=video_size)
+        return _create_cover_image_clip(image_paths[0], duration, video_size)
 
     clips = []
     image_duration = duration / len(image_paths)
@@ -341,8 +245,6 @@ def _create_image_background_clip(image_paths, template_config, duration, video_
             )
         )
 
-    clips.extend(_create_shape_clips(template_config, duration))
-
     return CompositeVideoClip(clips, size=video_size)
 
 
@@ -361,17 +263,7 @@ def _create_title_clip(title, template_config, duration, video_size):
         duration=title_duration,
     ).with_position(("center", template_config["title_y"]))
 
-    subtitle_clip = TextClip(
-        text=template_config["subtitle_text"],
-        font_size=template_config["subtitle_font_size"],
-        color=template_config["subtitle_color"],
-        method="caption",
-        size=(min(video_size[0] - 220, 1320), None),
-        text_align="center",
-        duration=title_duration,
-    ).with_position(("center", template_config["subtitle_y"]))
-
-    return [title_clip, subtitle_clip]
+    return [title_clip]
 
 
 def _create_caption_clips(captions_path, template_config, max_duration, video_size):
