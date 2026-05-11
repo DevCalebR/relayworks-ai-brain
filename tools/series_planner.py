@@ -180,19 +180,55 @@ VAGUE_BEAT_PHRASES = {
     "expert analysis",
     "final thoughts",
 }
-VAGUE_BEAT_ACADEMIC_PHRASES = (
-    "analysis of",
-    "background of",
-    "context of",
+VAGUE_OUTLINE_PHRASES = (
     "discussion of",
     "examination of",
+    "analysis of",
     "exploration of",
+    "overview of",
+    "background of",
+    "context of",
     "investigation of",
     "introduction to",
     "implications of",
-    "overview of",
+    "reflection on",
+    "reflections on",
     "summary of",
+    "focus on",
+    "deep dive",
+    "look at",
+    "possible theories",
+    "various theories",
+    "various",
+    "several theories",
+    "public fascination",
+    "cultural impact",
+    "expert opinions",
+    "media response",
+    "media studies",
+    "surveys",
+    "interviews",
+    "general legacy",
 )
+VAGUE_OUTLINE_STARTS = (
+    "discussion",
+    "examination",
+    "analysis",
+    "exploration",
+    "overview",
+    "reflection",
+    "reflections",
+    "focus",
+)
+VAGUE_OUTLINE_FIELDS = (
+    "title",
+    "chapter_summary",
+    "evidence_focus",
+    "ending_tease",
+)
+AWKWARD_TITLE_PHRASES = {
+    "faces of suspect",
+}
 FINAL_NEXT_EPISODE_SETUP = (
     "Series conclusion: leave viewers with the strongest grounded explanation and "
     "the mystery that remains."
@@ -1044,6 +1080,14 @@ def _is_sensational_title(title):
     return any(phrase in normalized for phrase in SENSATIONAL_TITLE_PHRASES)
 
 
+def _awkward_title_reason(title):
+    normalized = _simple_text_key(title)
+    for phrase in AWKWARD_TITLE_PHRASES:
+        if phrase in normalized:
+            return phrase
+    return None
+
+
 def _is_weak_hook(hook):
     hook_text = _quality_value_text(hook)
     normalized = _simple_text_key(hook_text)
@@ -1058,14 +1102,32 @@ def _is_weak_hook(hook):
     return False
 
 
+def _vague_outline_phrase(value):
+    normalized = _simple_text_key(value)
+    if not normalized:
+        return None
+
+    for phrase in VAGUE_OUTLINE_PHRASES:
+        phrase_key = _simple_text_key(phrase)
+        if re.search(rf"\b{re.escape(phrase_key)}\b", normalized):
+            return phrase
+
+    for phrase in VAGUE_OUTLINE_STARTS:
+        phrase_key = _simple_text_key(phrase)
+        if normalized == phrase_key or normalized.startswith(f"{phrase_key} "):
+            return phrase
+
+    return None
+
+
 def _vague_key_beat_reason(key_beat):
     normalized = _simple_text_key(key_beat)
     if not normalized:
         return "empty"
 
-    for phrase in VAGUE_BEAT_ACADEMIC_PHRASES:
-        if phrase in normalized:
-            return phrase
+    vague_outline_phrase = _vague_outline_phrase(key_beat)
+    if vague_outline_phrase:
+        return vague_outline_phrase
 
     if normalized in VAGUE_BEAT_PHRASES:
         return normalized
@@ -1101,12 +1163,18 @@ def _episode_quality_text(episode):
     )
 
 
+def _quality_field_items(value):
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
 def _append_unique(items, value):
     if value and value not in items:
         items.append(value)
 
 
-def validate_series_plan_quality(series_plan):
+def validate_series_plan_quality(series_plan, expected_episodes=None):
     """
     Return a lightweight local quality report for batch-series readiness.
     """
@@ -1139,12 +1207,23 @@ def validate_series_plan_quality(series_plan):
         report["ready_for_batch"] = False
         return report
 
-    expected_episodes = _parse_positive_int(series_plan.get("episode_count"))
-    if expected_episodes is None:
+    requested_episode_count = _parse_positive_int(expected_episodes)
+    declared_episode_count = _parse_positive_int(series_plan.get("episode_count"))
+    if declared_episode_count is None:
         issue("episode_count is missing or invalid.")
-    elif len(episode_plan) != expected_episodes:
+    elif (
+        requested_episode_count is not None
+        and declared_episode_count != requested_episode_count
+    ):
         issue(
-            f"episode_count is {expected_episodes}, but episode_plan has {len(episode_plan)} episodes.",
+            f"episode_count is {declared_episode_count}, but requested episode count is {requested_episode_count}.",
+            "Regenerate or repair the series plan with the requested episode count.",
+        )
+
+    expected_episode_count = requested_episode_count or declared_episode_count
+    if expected_episode_count is not None and len(episode_plan) != expected_episode_count:
+        issue(
+            f"episode_count is {expected_episode_count}, but episode_plan has {len(episode_plan)} episodes.",
             "Make episode_count match the saved episode plan before batching.",
         )
 
@@ -1185,6 +1264,17 @@ def validate_series_plan_quality(series_plan):
                 f"Episode {episode_number} suggested_video_format was normalized to landscape for review."
             )
 
+        image_count = episode.get("suggested_image_count")
+        if (
+            isinstance(image_count, bool)
+            or not isinstance(image_count, int)
+            or image_count <= 0
+        ):
+            issue(
+                f"Episode {episode_number} uses invalid suggested_image_count: {image_count}.",
+                "Use a positive integer image count for batch generation.",
+            )
+
         title = _quality_value_text(episode.get("title"))
         title_key = _simple_text_key(title)
         if _is_generic_title(title):
@@ -1196,6 +1286,12 @@ def validate_series_plan_quality(series_plan):
             issue(
                 f"Episode {episode_number} has an overclaiming title: {title}.",
                 "Use dramatic but factual titles that do not overstate uncertain facts.",
+            )
+        awkward_title = _awkward_title_reason(title)
+        if awkward_title:
+            issue(
+                f"Episode {episode_number} has awkward title wording: {awkward_title}.",
+                "Use grammatically clean episode titles with correct singular and plural wording.",
             )
         if title_key and title_key in seen_titles:
             issue(
@@ -1231,6 +1327,15 @@ def validate_series_plan_quality(series_plan):
                     f"Episode {episode_number} uses vague or fake-source-adjacent wording: {phrase}.",
                     "Name the category of evidence carefully or label the detail as disputed.",
                 )
+
+        for field in VAGUE_OUTLINE_FIELDS:
+            for item in _quality_field_items(episode.get(field)):
+                phrase = _vague_outline_phrase(item)
+                if phrase:
+                    issue(
+                        f"Episode {episode_number} has vague {field} wording: {phrase}.",
+                        "Replace essay-outline language with concrete, visual story moments.",
+                    )
 
         for key_beat in _normalize_list(episode.get("key_beats")):
             phrase = _vague_key_beat_reason(key_beat)
@@ -1272,6 +1377,22 @@ def validate_series_plan_quality(series_plan):
         )
 
     return report
+
+
+def _raise_for_series_plan_quality(series_plan, expected_episodes=None):
+    quality_report = validate_series_plan_quality(
+        series_plan,
+        expected_episodes=expected_episodes,
+    )
+    if quality_report["ready_for_batch"]:
+        return
+
+    issue_text = "; ".join(quality_report["issues"])
+    raise ValueError(
+        "Generated series plan failed quality validation: "
+        f"{issue_text} "
+        "Rerun series-plan or improve the prompt before running batch-series."
+    )
 
 
 def series_plan_from_loaded(loaded_plan):
@@ -1558,6 +1679,40 @@ def create_series_plan(
                     "offers a possible explanation but no complete answer, later versions "
                     "of the story turn uncertainty into legend, or the most grounded "
                     "theory explains the disappearance without solving every detail.\n"
+                    "- Key beats must be concrete moments, not categories. They must "
+                    "describe something a viewer can picture and must be useful for "
+                    "narration, AI scene image prompts, thumbnails, continuity, and "
+                    "batch episode generation. Each key beat should contain a specific "
+                    "action, clue, contradiction, discovery, consequence, location, or "
+                    "decision. Do not start key beats with vague academic nouns like "
+                    "discussion, examination, analysis, exploration, overview, reflection, "
+                    "focus, look at, or deep dive. Do not use filler phrases like "
+                    "various theories, several theories, public fascination, cultural "
+                    "impact, expert opinions, media response, media studies, surveys, "
+                    "interviews, or general legacy unless tied to a specific visible "
+                    "story moment. Do not generate key beats that sound like essay "
+                    "section headings. Write key beats like documentary story moments.\n"
+                    "- Bad key beat examples that must not appear: Discussion of abandoned "
+                    "parachutes and possible evidence; Detailed examination of the survival "
+                    "theory; Comparative analysis of theories and their flaws; Examination "
+                    "of legacy implications beyond law enforcement; Reflections on FBI "
+                    "closure results; Discussion among amateur detectives; Analysis of "
+                    "public response; Exploration of the main theories; Overview of the "
+                    "investigation; Focus on cultural impact; Deep dive into suspects.\n"
+                    "- Good key beat examples: Search teams comb through dark wooded terrain "
+                    "while investigators try to estimate where Cooper could have landed; "
+                    "A parachute lead is checked, then begins to fall apart when it does "
+                    "not match the hijacker's equipment; Investigators compare the storm, "
+                    "altitude, and terrain against the possibility that Cooper survived "
+                    "the jump; The ransom money discovery forces investigators to rethink "
+                    "where Cooper may have landed; The FBI closes the active investigation, "
+                    "but the mystery keeps growing outside official files; A suspect seems "
+                    "promising at first, until one missing detail weakens the case.\n"
+                    "- Titles, chapter_summary, evidence_focus, and ending_tease must also "
+                    "avoid academic outline wording such as discussion of, examination of, "
+                    "analysis of, exploration of, overview of, reflection on, focus on, "
+                    "look at, or deep dive. Do not use awkward title wording such as The "
+                    "Faces of Suspect.\n"
                     "- ending_tease must set up the next episode specifically. Avoid vague "
                     "teases like What happened next, The mystery continues, More questions "
                     "remain, The legend continues, or The mystery remains. Do not use "
@@ -1616,6 +1771,7 @@ def create_series_plan(
         audience=audience_text,
     )
     _validate_series_plan(series_plan, expected_episodes=episodes)
+    _raise_for_series_plan_quality(series_plan, expected_episodes=episodes)
     return series_plan
 
 
